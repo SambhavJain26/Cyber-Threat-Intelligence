@@ -4,7 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Send, Bot, User, Clock } from "lucide-react";
-import { chatSessions, quickQueries } from "@/data/mockData";
+
+// Mock data for quick queries (Chat Assistant is currently skipped from implementation)
+const quickQueries = [
+  "What are the top phishing domains this week?",
+  "Show me critical CVEs from last 24h",
+  "Analyze recent malware trends"
+];
 
 interface Message {
   id: number;

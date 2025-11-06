@@ -147,7 +147,7 @@ const settingsSources = [
   { id: 4, name: "Hybrid Analysis", lastSync: "N/A", status: "inactive" }
 ];
 
-module.exports = {
+export {
   dashboardStats,
   recentThreats,
   threatTrends,
