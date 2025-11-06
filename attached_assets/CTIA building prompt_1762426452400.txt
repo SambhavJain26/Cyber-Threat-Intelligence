@@ -1,0 +1,90 @@
+﻿Project Prompt: MERN CTI Aggregator (Frontend-First Build)
+1. Project Overview
+The goal is to build the complete frontend for a "CTI Aggregator" (Cyber Threat Intelligence) web application. This application will serve as a centralized dashboard for monitoring, analyzing, and reporting on various cybersecurity threats.
+The immediate task is to build the entire React single-page application (SPA) based on the provided screenshots. The frontend will be built using mock data, but structured in a way that it can be easily connected to a MERN backend (Node.js/Express/MongoDB) in the future.
+2. Technology Stack & Constraints
+You must use the technologies listed below. Do not use any additional build tools, languages, or frameworks.
+Frontend (Primary Build Task)
+* React.js: Core UI library. Use functional components and hooks (e.g., useState, useEffect).
+* React Router DOM: For client-side routing to create the different pages.
+* Data Fetching: For now, all data will come from a local mock data file (e.g., mockData.js).
+* Future Data Fetching: Structure your data handling (e.g., in services or custom hooks) so that you can easily add Axios later to make HTTP requests to the backend.
+* Charts: Use Recharts (or Chart.js) for all data visualizations (line, bar, doughnut charts).
+* Styling: Use standard CSS (e.g., .css files) or CSS-in-JS (like styled-components). The entire visual design must be custom-built to match the screenshots.
+Constraints (Strict)
+* No TypeScript. All code must be written in JavaScript (ES6+).
+* No Vite. The React application should be set up using create-react-app or a similar basic Webpack configuration.
+* No Tailwind CSS, Bootstrap, or other UI component libraries. All components and styling must be custom-built.
+* No GraphQL, Next.js, or other meta-frameworks. This is a classic React SPA.
+3. Frontend Build Specification
+3.1. Project Folder Structure
+To ensure the project is easy to manage and ready for backend integration, you must use a standard MERN monorepo structure.
+* / (Root Directory):
+   * /client: The entire React application (built with create-react-app) will live inside this folder. All your current work will be done here.
+   * /server: (Placeholder) This folder will be added by you later to contain the Node.js/Express backend.
+   * .gitignore
+   * README.md
+All React-specific folders (src, public, components, pages, etc.) will be created inside the /client directory.
+3.2. Mock Data & API Structure
+* You must create a local mock data file (e.g., /client/src/mockData.js) that simulates the JSON responses from the future backend.
+* This data should be structured to match the API endpoints that will be built later (see "Future Backend API Plan" below).
+* In your components (e.g., in useEffect hooks), import and use this mock data as if it were coming from an API. This will make it easy to replace the import with an axios call.
+3.3. Frontend Application Structure
+* Main Layout: A persistent layout component (e.g., Layout.js) containing:
+   * A Sidebar component (for navigation).
+   * A TopBar component (for the search bar and user profile icon).
+* Routing: Use react-router-dom in your main App.js to render the page components within the main layout.
+3.4. Page Components (To Be Built)
+(These components will be created inside /client/src/pages/ or a similar folder)
+* Dashboard:
+   * Displays the four main KPI cards (Total IOCs, New Feeds, Critical CVEs, Phishing Domains).
+   * Displays the "Recent Threats" table.
+   * Displays the "Threat Trends (7 Days)" line chart.
+* Threat Feeds:
+   * Displays the "IOC Database" in a detailed table.
+   * Implements client-side search and filter (by type, by severity) functionality.
+   * Implements client-side pagination (Previous/Next buttons, page count).
+   * Includes a non-functional "Export" button.
+* CVE Reports:
+   * Displays the "Latest CVE Reports" in a list or table.
+   * Renders the CVSS score with a colored badge based on its value (e.g., Critical > 9.0, High 7.0-8.9).
+   * Includes a client-side search bar that filters the list.
+   * The "Details" button can be non-functional for this scope.
+* Analytics:
+   * A dashboard composed entirely of charts and KPIs.
+   * Renders the four KPI cards (Avg Daily Threats, Active Sources, etc.).
+   * Renders all four charts: "Threats Per Day" (Line), "Threat Type Distribution" (Doughnut), "Most Active Sources" (Horizontal Bar), and "Severity Trends" (Stacked Bar).
+* Chat Assistant:
+   * A stateful chat interface.
+   * Displays a list of mock "Recent Sessions".
+   * Manages a chat log in its component state.
+   * Simulates a bot response (e.g., with a setTimeout after a user sends a message).
+   * Includes "Quick query" buttons that, when clicked, add a predefined message to the chat.
+* Settings:
+   * A form divided into "General," "Notifications," "Security," and "Threat Intelligence Sources."
+   * Populates the form (dropdowns, toggles, text inputs) from the mock data.
+   * Manages the form's state using useState. All changes will be local and reset on refresh (until the backend is added).
+   * Displays the list of "Threat Intelligence Sources" and their statuses from the mock data.
+4. Future Backend API Plan (For Reference)
+This is the API structure your frontend should be built to consume. Your mock data should simulate the responses from these endpoints.
+* /api/auth/ (/login, /register, etc.)
+* /api/dashboard/
+   * GET /stats: (For the 4 dashboard KPIs)
+   * GET /recent-threats: (For the dashboard's "Recent Threats" table)
+   * GET /threat-trends: (For the dashboard's line chart)
+* /api/threat-feeds/
+   * GET /: (For the "Threat Feeds" page table, with pagination & filtering)
+* /api/cve-reports/
+   * GET /: (For the "CVE Reports" page list)
+* /api/analytics/
+   * GET /stats: (For the 4 analytics KPIs)
+   * GET /threats-per-day: (For the "Threats Per Day" line chart)
+   * GET /threat-type-distribution: (For the doughnut chart)
+   * GET /active-sources: (For the horizontal bar chart)
+   * GET /severity-trends: (For the stacked bar chart)
+* /api/chat/
+   * POST /query: (For the chat assistant)
+* /api/settings/
+   * GET /: (To get current user settings)
+   * PUT /: (To update user settings)
+   * GET /sources: (To get the "Threat Intelligence Sources" list)
