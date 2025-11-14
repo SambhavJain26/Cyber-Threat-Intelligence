@@ -1,0 +1,104 @@
+# requirements.txt
+# Install with: pip install -r requirements.txt
+
+Flask==3.0.0
+flask-cors==4.0.0
+requests==2.31.0
+python-dotenv==1.0.0
+
+# Optional but recommended
+gunicorn==21.2.0  # For production deployment
+
+
+# ==================================================
+# .env.example
+# Copy this to .env and add your API keys
+# ==================================================
+
+# AlienVault OTX API Key
+# Get it from: https://otx.alienvault.com/api
+OTX_API_KEY=your_otx_api_key_here
+
+# VirusTotal API Key
+# Get it from: https://www.virustotal.com/gui/my-apikey
+VIRUSTOTAL_API_KEY=your_virustotal_api_key_here
+
+# PhishTank API Key (optional, but recommended for better rate limits)
+# Get it from: https://www.phishtank.com/api_register.php
+PHISHTANK_API_KEY=your_phishtank_api_key_here
+
+# Flask Configuration
+FLASK_ENV=development
+FLASK_DEBUG=True
+PORT=5000
+
+
+# ==================================================
+# config.py
+# Configuration file for the application
+# ==================================================
+
+import os
+from datetime import timedelta
+
+class Config:
+    """Base configuration"""
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    
+    # API Rate Limits
+    RATE_LIMIT_ENABLED = True
+    RATE_LIMIT_REQUESTS = 100  # requests per minute
+    
+    # Data Update Configuration
+    UPDATE_INTERVAL = 3600  # 1 hour in seconds
+    
+    # Cache Configuration
+    CACHE_ENABLED = True
+    CACHE_TTL = 1800  # 30 minutes
+    
+    # VirusTotal Configuration
+    VIRUSTOTAL_RATE_LIMIT = 4  # requests per minute (free tier)
+    VIRUSTOTAL_REQUEST_DELAY = 15  # seconds between requests
+    
+    # NVD Configuration
+    NVD_DEFAULT_DAYS = 7  # Default days to look back for CVEs
+    
+    # Logging
+    LOG_LEVEL = 'INFO'
+    LOG_FILE = 'threat_intel.log'
+
+
+class DevelopmentConfig(Config):
+    """Development configuration"""
+    DEBUG = True
+    TESTING = False
+
+
+class ProductionConfig(Config):
+    """Production configuration"""
+    DEBUG = False
+    TESTING = False
+    
+    # In production, use environment variables
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    
+    # Stricter rate limits in production
+    RATE_LIMIT_REQUESTS = 50
+
+
+class TestingConfig(Config):
+    """Testing configuration"""
+    DEBUG = True
+    TESTING = True
+    
+    # Faster updates for testing
+    UPDATE_INTERVAL = 300  # 5 minutes
+
+
+# Configuration dictionary
+config = {
+    'development': DevelopmentConfig,
+    'production': ProductionConfig,
+    'testing': TestingConfig,
+    'default': DevelopmentConfig
+}
