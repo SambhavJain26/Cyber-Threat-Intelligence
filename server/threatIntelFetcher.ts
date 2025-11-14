@@ -13,7 +13,7 @@ export class ThreatIntelligenceFetcher {
   private otxBaseUrl = 'https://otx.alienvault.com/api/v1';
   private virusTotalBaseUrl = 'https://www.virustotal.com/api/v3';
   private abuseChUrls = {
-    malware: 'https://bazaar.abuse.ch/export/json/recent/',
+    malware: 'https://mb-api.abuse.ch/api/v1/',
     urlhaus: 'https://urlhaus.abuse.ch/downloads/json_recent/',
     threatfox: 'https://threatfox.abuse.ch/export/json/recent/'
   };
@@ -57,7 +57,15 @@ export class ThreatIntelligenceFetcher {
 
   async fetchAbuseChMalware(): Promise<ThreatData> {
     try {
-      const response = await axios.get(this.abuseChUrls.malware, { timeout: 30000 });
+      const response = await axios.post(
+        this.abuseChUrls.malware,
+        { query: 'get_recent', selector: 'time' },
+        { 
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 30000 
+        }
+      );
+      
       const malwareSamples = response.data.data?.slice(0, 50).map((sample: any) => ({
         source: 'Abuse.ch MalwareBazaar',
         sha256: sample.sha256_hash,
@@ -231,6 +239,39 @@ export class ThreatIntelligenceFetcher {
     }
   }
 
+  async fetchVirusTotalEnrichment(indicators: string[]): Promise<ThreatData> {
+    try {
+      const enrichedData: any[] = [];
+      const sampleIndicators = indicators.slice(0, 5);
+      
+      for (const indicator of sampleIndicators) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 15000));
+          
+          let result;
+          if (/^(\d{1,3}\.){3}\d{1,3}$/.test(indicator)) {
+            result = await this.fetchVirusTotalIpReport(indicator);
+          } else if (/^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/.test(indicator)) {
+            result = await this.fetchVirusTotalDomainReport(indicator);
+          } else {
+            continue;
+          }
+          
+          if (result.success && result.data) {
+            enrichedData.push(...result.data);
+          }
+        } catch (error) {
+          console.warn(`VirusTotal lookup failed for ${indicator}`);
+        }
+      }
+      
+      return { success: true, data: enrichedData, count: enrichedData.length };
+    } catch (error: any) {
+      console.error('VirusTotal enrichment error:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
   async fetchAllFeeds(): Promise<any> {
     const results = await Promise.allSettled([
       this.fetchOtxPulses(20),
@@ -241,7 +282,7 @@ export class ThreatIntelligenceFetcher {
       this.fetchCisaKev()
     ]);
 
-    return {
+    const baseData: any = {
       timestamp: new Date().toISOString(),
       sources: {
         'AlienVault OTX': results[0].status === 'fulfilled' ? results[0].value : { success: false, error: 'Failed to fetch' },
@@ -252,5 +293,30 @@ export class ThreatIntelligenceFetcher {
         'CISA KEV': results[5].status === 'fulfilled' ? results[5].value : { success: false, error: 'Failed to fetch' }
       }
     };
+
+    const otxData = baseData.sources['AlienVault OTX'];
+    const indicators: string[] = [];
+    if (otxData.success && otxData.data) {
+      otxData.data.forEach((pulse: any) => {
+        pulse.indicators?.forEach((ind: any) => {
+          if ((ind.type === 'IPv4' || ind.type === 'domain') && indicators.length < 10) {
+            indicators.push(ind.indicator);
+          }
+        });
+      });
+    }
+
+    if (indicators.length > 0) {
+      try {
+        const vtResult = await this.fetchVirusTotalEnrichment(indicators);
+        baseData.sources['VirusTotal'] = vtResult;
+      } catch (error) {
+        baseData.sources['VirusTotal'] = { success: false, error: 'Enrichment failed' };
+      }
+    } else {
+      baseData.sources['VirusTotal'] = { success: true, data: [], count: 0 };
+    }
+
+    return baseData;
   }
 }

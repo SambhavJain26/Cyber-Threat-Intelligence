@@ -171,6 +171,28 @@ function processThreatData(data: any) {
         });
       });
     }
+    
+    // Process VirusTotal
+    if (sourceName === 'VirusTotal') {
+      sd.data.forEach((vtData: any, index: number) => {
+        const maliciousCount = vtData.malicious_count || 0;
+        const indicator = vtData.ip_address || vtData.domain;
+        const type = vtData.ip_address ? 'IP Address' : 'Domain';
+        
+        if (maliciousCount > 0) {
+          threatFeeds.push({
+            id: `vt-${index}`,
+            date: new Date().toLocaleString(),
+            type: type,
+            value: indicator,
+            source: 'VirusTotal',
+            threatType: `Malicious (${maliciousCount} detections)`,
+            severity: maliciousCount > 5 ? 'Critical' : 'High'
+          });
+          totalIOCs++;
+        }
+      });
+    }
   }
   
   // Update cached data
