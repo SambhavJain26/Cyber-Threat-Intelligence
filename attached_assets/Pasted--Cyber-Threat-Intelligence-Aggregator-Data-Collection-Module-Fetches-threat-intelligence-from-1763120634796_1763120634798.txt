@@ -1,0 +1,385 @@
+"""
+Cyber Threat Intelligence Aggregator - Data Collection Module
+Fetches threat intelligence from multiple OSINT sources
+"""
+
+import requests
+import json
+import csv
+from datetime import datetime
+from typing import Dict, List, Any
+import time
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+
+class ThreatIntelligenceFetcher:
+    """Main class to fetch data from various threat intelligence sources"""
+    
+    def __init__(self):
+        # API Keys (store in .env file)
+        self.otx_api_key = os.getenv('OTX_API_KEY', '')
+        self.virustotal_api_key = os.getenv('VIRUSTOTAL_API_KEY', '')
+        self.phishtank_api_key = os.getenv('PHISHTANK_API_KEY', '')
+        
+        # Base URLs
+        self.otx_base_url = "https://otx.alienvault.com/api/v1"
+        self.abuse_ch_urls = {
+            'malware': 'https://bazaar.abuse.ch/export/json/recent/',
+            'urlhaus': 'https://urlhaus.abuse.ch/downloads/json_recent/',
+            'threatfox': 'https://threatfox.abuse.ch/export/json/recent/'
+        }
+        self.phishtank_url = "http://data.phishtank.com/data/{}/online-valid.json"
+        self.nvd_base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+        self.cisa_kev_url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+        self.virustotal_base_url = "https://www.virustotal.com/api/v3"
+    
+    # ============ AlienVault OTX ============
+    def fetch_otx_pulses(self, limit=10):
+        """Fetch recent threat pulses from AlienVault OTX"""
+        try:
+            headers = {'X-OTX-API-KEY': self.otx_api_key}
+            url = f"{self.otx_base_url}/pulses/subscribed"
+            params = {'limit': limit, 'page': 1}
+            
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            pulses = []
+            
+            for pulse in data.get('results', []):
+                pulse_data = {
+                    'source': 'AlienVault OTX',
+                    'pulse_id': pulse.get('id'),
+                    'name': pulse.get('name'),
+                    'description': pulse.get('description'),
+                    'created': pulse.get('created'),
+                    'modified': pulse.get('modified'),
+                    'tags': pulse.get('tags', []),
+                    'indicators': []
+                }
+                
+                # Extract indicators
+                for indicator in pulse.get('indicators', []):
+                    pulse_data['indicators'].append({
+                        'type': indicator.get('type'),
+                        'indicator': indicator.get('indicator'),
+                        'description': indicator.get('description')
+                    })
+                
+                pulses.append(pulse_data)
+            
+            return {'success': True, 'data': pulses, 'count': len(pulses)}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    # ============ Abuse.ch Feeds ============
+    def fetch_abusech_malware(self):
+        """Fetch recent malware samples from MalwareBazaar"""
+        try:
+            response = requests.get(self.abuse_ch_urls['malware'], timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            malware_samples = []
+            
+            for sample in data.get('data', [])[:50]:  # Limit to 50 recent
+                malware_samples.append({
+                    'source': 'Abuse.ch MalwareBazaar',
+                    'sha256': sample.get('sha256_hash'),
+                    'md5': sample.get('md5_hash'),
+                    'file_type': sample.get('file_type'),
+                    'file_name': sample.get('file_name'),
+                    'signature': sample.get('signature'),
+                    'first_seen': sample.get('first_seen'),
+                    'tags': sample.get('tags', [])
+                })
+            
+            return {'success': True, 'data': malware_samples, 'count': len(malware_samples)}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def fetch_abusech_urls(self):
+        """Fetch malicious URLs from URLhaus"""
+        try:
+            response = requests.get(self.abuse_ch_urls['urlhaus'], timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            malicious_urls = []
+            
+            for url_entry in data.get('data', [])[:50]:
+                malicious_urls.append({
+                    'source': 'Abuse.ch URLhaus',
+                    'url': url_entry.get('url'),
+                    'url_status': url_entry.get('url_status'),
+                    'threat': url_entry.get('threat'),
+                    'tags': url_entry.get('tags', []),
+                    'dateadded': url_entry.get('dateadded')
+                })
+            
+            return {'success': True, 'data': malicious_urls, 'count': len(malicious_urls)}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def fetch_abusech_iocs(self):
+        """Fetch IOCs from ThreatFox"""
+        try:
+            response = requests.get(self.abuse_ch_urls['threatfox'], timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            iocs = []
+            
+            for ioc in data.get('data', [])[:50]:
+                iocs.append({
+                    'source': 'Abuse.ch ThreatFox',
+                    'ioc_type': ioc.get('ioc_type'),
+                    'ioc_value': ioc.get('ioc_value'),
+                    'threat_type': ioc.get('threat_type'),
+                    'malware': ioc.get('malware'),
+                    'confidence_level': ioc.get('confidence_level'),
+                    'first_seen': ioc.get('first_seen'),
+                    'tags': ioc.get('tags', [])
+                })
+            
+            return {'success': True, 'data': iocs, 'count': len(iocs)}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    # ============ PhishTank ============
+    def fetch_phishtank(self):
+        """Fetch phishing URLs from PhishTank"""
+        try:
+            # PhishTank requires API key in URL
+            url = self.phishtank_url.format(self.phishtank_api_key) if self.phishtank_api_key else \
+                  "http://data.phishtank.com/data/online-valid.json"
+            
+            response = requests.get(url, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            phishing_urls = []
+            
+            # Limit to 100 most recent
+            for entry in data[:100]:
+                phishing_urls.append({
+                    'source': 'PhishTank',
+                    'phish_id': entry.get('phish_id'),
+                    'url': entry.get('url'),
+                    'target': entry.get('target'),
+                    'submission_time': entry.get('submission_time'),
+                    'verified': entry.get('verified'),
+                    'verification_time': entry.get('verification_time')
+                })
+            
+            return {'success': True, 'data': phishing_urls, 'count': len(phishing_urls)}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    # ============ NVD (National Vulnerability Database) ============
+    def fetch_nvd_recent_cves(self, days=7):
+        """Fetch recent CVEs from NVD"""
+        try:
+            # Calculate date range
+            end_date = datetime.now()
+            start_date = end_date.replace(day=end_date.day - days)
+            
+            params = {
+                'pubStartDate': start_date.strftime('%Y-%m-%dT00:00:00.000'),
+                'pubEndDate': end_date.strftime('%Y-%m-%dT23:59:59.999'),
+                'resultsPerPage': 50
+            }
+            
+            response = requests.get(self.nvd_base_url, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            cves = []
+            
+            for vuln in data.get('vulnerabilities', []):
+                cve_data = vuln.get('cve', {})
+                
+                # Extract CVSS score
+                cvss_score = None
+                severity = None
+                metrics = cve_data.get('metrics', {})
+                if 'cvssMetricV31' in metrics and metrics['cvssMetricV31']:
+                    cvss_score = metrics['cvssMetricV31'][0]['cvssData']['baseScore']
+                    severity = metrics['cvssMetricV31'][0]['cvssData']['baseSeverity']
+                
+                cves.append({
+                    'source': 'NVD',
+                    'cve_id': cve_data.get('id'),
+                    'description': cve_data.get('descriptions', [{}])[0].get('value', ''),
+                    'published': cve_data.get('published'),
+                    'last_modified': cve_data.get('lastModified'),
+                    'cvss_score': cvss_score,
+                    'severity': severity,
+                    'references': [ref.get('url') for ref in cve_data.get('references', [])][:5]
+                })
+            
+            return {'success': True, 'data': cves, 'count': len(cves)}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    # ============ CISA Known Exploited Vulnerabilities ============
+    def fetch_cisa_kev(self):
+        """Fetch CISA's catalog of known exploited vulnerabilities"""
+        try:
+            response = requests.get(self.cisa_kev_url, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            exploited_cves = []
+            
+            # Get most recent 50
+            for vuln in data.get('vulnerabilities', [])[:50]:
+                exploited_cves.append({
+                    'source': 'CISA KEV',
+                    'cve_id': vuln.get('cveID'),
+                    'vendor_project': vuln.get('vendorProject'),
+                    'product': vuln.get('product'),
+                    'vulnerability_name': vuln.get('vulnerabilityName'),
+                    'date_added': vuln.get('dateAdded'),
+                    'short_description': vuln.get('shortDescription'),
+                    'required_action': vuln.get('requiredAction'),
+                    'due_date': vuln.get('dueDate'),
+                    'known_ransomware': vuln.get('knownRansomwareCampaignUse', False)
+                })
+            
+            return {'success': True, 'data': exploited_cves, 'count': len(exploited_cves)}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    # ============ VirusTotal ============
+    def fetch_virustotal_ip_report(self, ip_address):
+        """Fetch IP reputation from VirusTotal"""
+        try:
+            headers = {'x-apikey': self.virustotal_api_key}
+            url = f"{self.virustotal_base_url}/ip_addresses/{ip_address}"
+            
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            attributes = data.get('data', {}).get('attributes', {})
+            
+            result = {
+                'source': 'VirusTotal',
+                'ip_address': ip_address,
+                'country': attributes.get('country'),
+                'as_owner': attributes.get('as_owner'),
+                'reputation': attributes.get('reputation'),
+                'last_analysis_stats': attributes.get('last_analysis_stats', {}),
+                'malicious_count': attributes.get('last_analysis_stats', {}).get('malicious', 0)
+            }
+            
+            return {'success': True, 'data': result}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def fetch_virustotal_domain_report(self, domain):
+        """Fetch domain reputation from VirusTotal"""
+        try:
+            headers = {'x-apikey': self.virustotal_api_key}
+            url = f"{self.virustotal_base_url}/domains/{domain}"
+            
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            attributes = data.get('data', {}).get('attributes', {})
+            
+            result = {
+                'source': 'VirusTotal',
+                'domain': domain,
+                'reputation': attributes.get('reputation'),
+                'last_analysis_stats': attributes.get('last_analysis_stats', {}),
+                'malicious_count': attributes.get('last_analysis_stats', {}).get('malicious', 0),
+                'categories': attributes.get('categories', {})
+            }
+            
+            return {'success': True, 'data': result}
+        
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    # ============ Aggregation Function ============
+    def fetch_all_feeds(self):
+        """Fetch data from all sources"""
+        print("Starting threat intelligence collection...")
+        
+        results = {
+            'timestamp': datetime.now().isoformat(),
+            'sources': {}
+        }
+        
+        # AlienVault OTX
+        print("Fetching AlienVault OTX pulses...")
+        results['sources']['otx_pulses'] = self.fetch_otx_pulses()
+        time.sleep(1)
+        
+        # Abuse.ch feeds
+        print("Fetching Abuse.ch malware samples...")
+        results['sources']['abusech_malware'] = self.fetch_abusech_malware()
+        time.sleep(1)
+        
+        print("Fetching Abuse.ch malicious URLs...")
+        results['sources']['abusech_urls'] = self.fetch_abusech_urls()
+        time.sleep(1)
+        
+        print("Fetching Abuse.ch IOCs...")
+        results['sources']['abusech_iocs'] = self.fetch_abusech_iocs()
+        time.sleep(1)
+        
+        # PhishTank
+        print("Fetching PhishTank phishing URLs...")
+        results['sources']['phishtank'] = self.fetch_phishtank()
+        time.sleep(1)
+        
+        # NVD
+        print("Fetching NVD recent CVEs...")
+        results['sources']['nvd_cves'] = self.fetch_nvd_recent_cves()
+        time.sleep(1)
+        
+        # CISA KEV
+        print("Fetching CISA known exploited vulnerabilities...")
+        results['sources']['cisa_kev'] = self.fetch_cisa_kev()
+        
+        print("Collection complete!")
+        return results
+
+
+# Example usage
+if __name__ == "__main__":
+    fetcher = ThreatIntelligenceFetcher()
+    
+    # Fetch all feeds
+    all_data = fetcher.fetch_all_feeds()
+    
+    # Save to JSON file
+    with open('threat_intelligence_data.json', 'w') as f:
+        json.dump(all_data, f, indent=2)
+    
+    print(f"\nData saved to threat_intelligence_data.json")
+    
+    # Print summary
+    print("\n=== Collection Summary ===")
+    for source, result in all_data['sources'].items():
+        if result.get('success'):
+            print(f"{source}: {result.get('count', 0)} items collected")
+        else:
+            print(f"{source}: ERROR - {result.get('error')}")
