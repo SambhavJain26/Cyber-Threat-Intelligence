@@ -11,7 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { threatFeedsAPI } from "@/lib/api";
+import { threatFeedsAPI, exportAPI } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ThreatFeeds() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -21,6 +22,8 @@ export default function ThreatFeeds() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedsData, setFeedsData] = useState<any>({ data: [], totalItems: 0, totalPages: 0 });
+  const [exporting, setExporting] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     // Reset to page 1 when filters change
@@ -54,6 +57,42 @@ export default function ThreatFeeds() {
 
   const paginatedData = feedsData.data;
   const totalPages = feedsData.totalPages || 1;
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const response = await exportAPI.exportThreatFeeds({
+        search: searchQuery || undefined,
+        type: typeFilter !== "all" ? typeFilter : undefined,
+        severity: severityFilter !== "all" ? severityFilter : undefined
+      });
+
+      // Create a blob from the response and download it
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `threat-feeds-${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "Threat feeds exported successfully!",
+      });
+    } catch (err) {
+      console.error("Export error:", err);
+      toast({
+        title: "Error",
+        description: "Failed to export threat feeds. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const getSeverityColor = (severity: string) => {
     const colors: Record<string, string> = {
@@ -101,9 +140,9 @@ export default function ThreatFeeds() {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold" data-testid="text-section-title">IOC Database</h2>
-          <Button variant="outline" size="sm" data-testid="button-export">
-            <Download className="w-4 h-4 mr-2" />
-            Export
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} data-testid="button-export">
+            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {exporting ? "Exporting..." : "Export"}
           </Button>
         </div>
 

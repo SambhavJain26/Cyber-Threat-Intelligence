@@ -16,6 +16,7 @@ interface CachedData {
   dashboardStats: any;
   recentThreats: any[];
   sourceStatus: Record<string, { success: boolean; count: number; error?: string; lastFetch?: string }>;
+  settings?: any;
 }
 
 const cachedData: CachedData = {
@@ -30,7 +31,8 @@ const cachedData: CachedData = {
     phishingDomains: { value: 0, change: "Fetching..." }
   },
   recentThreats: [],
-  sourceStatus: {}
+  sourceStatus: {},
+  settings: null
 };
 
 // Background fetcher function
@@ -521,11 +523,26 @@ Format the response in a clear, professional manner suitable for a security oper
 
   // Settings endpoints
   app.get("/api/settings/general", (req, res) => {
-    res.json(mockData.settingsGeneral);
+    // Return saved settings if available, otherwise return defaults
+    if (cachedData.settings?.general) {
+      res.json(cachedData.settings.general);
+    } else {
+      res.json(mockData.settingsGeneral);
+    }
   });
 
   app.get("/api/settings/sources", (req, res) => {
     res.json(mockData.settingsSources);
+  });
+
+  app.post("/api/settings", (req, res) => {
+    const settings = req.body;
+    console.log("Settings saved:", settings);
+    
+    // Store settings in cached data so they persist across requests
+    cachedData.settings = settings;
+    
+    res.json({ success: true, message: "Settings saved successfully" });
   });
 
   // New threat intelligence endpoints
@@ -658,6 +675,80 @@ Format the response in a clear, professional manner suitable for a security oper
         error: error.message
       });
     }
+  });
+
+  // Search endpoint - search across threat feeds and CVEs
+  app.get("/api/search", (req, res) => {
+    const { q = "" } = req.query;
+    const query = (q as string).toLowerCase();
+
+    if (!query) {
+      return res.json({ threatFeeds: [], cveReports: [] });
+    }
+
+    // Use real data if available, otherwise fallback to mock data
+    const threatFeedSource = cachedData.threatFeeds.length > 0 ? cachedData.threatFeeds : mockData.iocDatabase;
+    const cveSource = cachedData.cveReports.length > 0 ? cachedData.cveReports : mockData.cveReports;
+
+    // Search threat feeds
+    const threatFeedResults = threatFeedSource.filter((item: any) => 
+      item.value.toLowerCase().includes(query) ||
+      item.source.toLowerCase().includes(query) ||
+      item.threatType.toLowerCase().includes(query) ||
+      item.type.toLowerCase().includes(query)
+    ).slice(0, 10);
+
+    // Search CVE reports
+    const cveResults = cveSource.filter((cve: any) => 
+      cve.id.toLowerCase().includes(query) ||
+      cve.title.toLowerCase().includes(query) ||
+      cve.description.toLowerCase().includes(query)
+    ).slice(0, 10);
+
+    res.json({
+      threatFeeds: threatFeedResults,
+      cveReports: cveResults,
+      totalResults: threatFeedResults.length + cveResults.length
+    });
+  });
+
+  // Export endpoint - export threat feeds as CSV
+  app.get("/api/export/threat-feeds", (req, res) => {
+    const { search = "", type = "all", severity = "all" } = req.query;
+
+    // Use real data if available, otherwise fallback to mock data
+    const dataSource = cachedData.threatFeeds.length > 0 ? cachedData.threatFeeds : mockData.iocDatabase;
+
+    let filtered = dataSource.filter((item: any) => {
+      const matchesSearch = !search || 
+        item.value.toLowerCase().includes((search as string).toLowerCase()) ||
+        item.source.toLowerCase().includes((search as string).toLowerCase());
+      const matchesType = type === "all" || item.type === type;
+      const matchesSeverity = severity === "all" || item.severity === severity;
+      return matchesSearch && matchesType && matchesSeverity;
+    });
+
+    // Generate CSV
+    const headers = ["Date", "IOC Type", "IOC Value", "Source", "Threat Type", "Severity"];
+    const csvRows = [headers.join(",")];
+
+    filtered.forEach((item: any) => {
+      const row = [
+        item.date,
+        item.type,
+        `"${item.value}"`, // Quote to handle special characters
+        item.source,
+        `"${item.threatType}"`,
+        item.severity
+      ];
+      csvRows.push(row.join(","));
+    });
+
+    const csvContent = csvRows.join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="threat-feeds-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csvContent);
   });
 
   const httpServer = createServer(app);

@@ -40,7 +40,19 @@ export const analyticsAPI = {
 // Settings API
 export const settingsAPI = {
   getGeneral: () => api.get("/settings/general"),
-  getSources: () => api.get("/settings/sources")
+  getSources: () => api.get("/settings/sources"),
+  saveSettings: (settings: any) => api.post("/settings", settings)
+};
+
+// Search API
+export const searchAPI = {
+  search: (query: string) => api.get("/search", { params: { q: query } })
+};
+
+// Export API
+export const exportAPI = {
+  exportThreatFeeds: (params?: { search?: string; type?: string; severity?: string }) => 
+    api.get("/export/threat-feeds", { params, responseType: 'blob' })
 };
 
 // Threat Intelligence API

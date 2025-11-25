@@ -14,10 +14,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { settingsAPI } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
   const [settings, setSettings] = useState<any>({
     general: {},
     notifications: {},
@@ -61,9 +64,24 @@ export default function Settings() {
     fetchSettings();
   }, []);
 
-  const handleSave = () => {
-    console.log("Settings saved:", settings);
-    alert("Settings saved successfully!");
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      await settingsAPI.saveSettings(settings);
+      toast({
+        title: "Success",
+        description: "Settings saved successfully!",
+      });
+    } catch (err) {
+      console.error("Save settings error:", err);
+      toast({
+        title: "Error",
+        description: "Failed to save settings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -147,6 +165,7 @@ export default function Settings() {
                   <SelectItem value="EST">EST</SelectItem>
                   <SelectItem value="PST">PST</SelectItem>
                   <SelectItem value="GMT">GMT</SelectItem>
+                  <SelectItem value="IST">IST (Indian Standard Time)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -322,7 +341,7 @@ export default function Settings() {
             Threat Intelligence Sources
           </h2>
           <div className="space-y-3">
-            {settings.sources.map((source) => (
+            {settings.sources.map((source: any) => (
               <div
                 key={source.id}
                 className="flex items-center justify-between p-3 rounded-md border border-border"
@@ -348,8 +367,9 @@ export default function Settings() {
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} size="lg" data-testid="button-save-settings">
-          Save Changes
+        <Button onClick={handleSave} size="lg" disabled={saving} data-testid="button-save-settings">
+          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          {saving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
     </div>
