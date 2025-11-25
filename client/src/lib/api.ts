@@ -23,7 +23,9 @@ export const threatFeedsAPI = {
 // CVE Reports API
 export const cveReportsAPI = {
   getReports: (search?: string) => 
-    api.get("/cve-reports", { params: { search } })
+    api.get("/cve-reports", { params: { search } }),
+  generateAnalysis: (cveId: string, cveData: any) =>
+    api.post("/cve-reports/analyze", { cveId, cveData })
 };
 
 // Analytics API

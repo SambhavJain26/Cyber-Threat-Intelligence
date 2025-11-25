@@ -330,6 +330,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(filtered);
   });
 
+  // Generate AI analysis for a specific CVE
+  app.post("/api/cve-reports/analyze", async (req, res) => {
+    try {
+      const { cveId, cveData } = req.body;
+      
+      if (!cveId || !cveData) {
+        return res.status(400).json({ error: "CVE ID and data are required" });
+      }
+
+      const prompt = `Analyze the following CVE vulnerability and provide a comprehensive threat intelligence report:
+
+CVE ID: ${cveId}
+Title: ${cveData.title}
+CVSS Score: ${cveData.cvssScore}
+Published: ${cveData.published}
+Description: ${cveData.description}
+
+Please provide:
+1. **Severity Assessment**: Analyze the threat level based on the CVSS score and description
+2. **Potential Impact**: What systems or applications could be affected?
+3. **Attack Vectors**: How might attackers exploit this vulnerability?
+4. **Recommended Actions**: What should security teams do to mitigate this threat?
+5. **Priority Level**: Should this be addressed immediately, or can it wait?
+
+Format the response in a clear, professional manner suitable for a security operations team.`;
+
+      const context = {
+        threatFeeds: cachedData.threatFeeds.slice(0, 5),
+        cveReports: cachedData.cveReports.slice(0, 5),
+        dashboardStats: cachedData.dashboardStats,
+        sourceStatus: cachedData.sourceStatus
+      };
+
+      const analysis = await analyzeThreatWithAI(prompt, context);
+
+      res.json({ 
+        success: true, 
+        analysis,
+        cveId
+      });
+    } catch (error: any) {
+      console.error("CVE analysis error:", error.message);
+      res.status(500).json({ 
+        error: error.message || "Failed to generate CVE analysis" 
+      });
+    }
+  });
+
   // Analytics endpoints with real data preprocessing
   app.get("/api/analytics/stats", (req, res) => {
     const totalThreats = cachedData.threatFeeds.length;

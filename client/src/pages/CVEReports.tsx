@@ -3,14 +3,27 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, ExternalLink, Clock, Loader2, AlertTriangle } from "lucide-react";
+import { Search, ExternalLink, Clock, Loader2, AlertTriangle, Sparkles } from "lucide-react";
 import { cveReportsAPI } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 
 export default function CVEReports() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cveReports, setCveReports] = useState<any[]>([]);
+  const [aiAnalysisOpen, setAiAnalysisOpen] = useState(false);
+  const [selectedCve, setSelectedCve] = useState<any>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<string>("");
+  const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -45,6 +58,42 @@ export default function CVEReports() {
     if (score >= 7.0) return "HIGH";
     if (score >= 4.0) return "MEDIUM";
     return "LOW";
+  };
+
+  const handleGenerateAnalysis = async (cve: any) => {
+    setSelectedCve(cve);
+    setAiAnalysisOpen(true);
+    setAiAnalysis("");
+    setGeneratingAnalysis(true);
+
+    try {
+      const response = await cveReportsAPI.generateAnalysis(cve.id, {
+        title: cve.title,
+        description: cve.description,
+        cvssScore: cve.cvssScore,
+        published: cve.published
+      });
+      
+      setAiAnalysis(response.data.analysis);
+      
+      toast({
+        title: "Analysis Generated",
+        description: "AI analysis has been generated successfully.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Analysis Failed",
+        description: err.response?.data?.error || "Failed to generate AI analysis. Please check your OpenAI API configuration.",
+        variant: "destructive",
+      });
+      setAiAnalysis("Failed to generate analysis. Please ensure OpenAI API is configured correctly.");
+    } finally {
+      setGeneratingAnalysis(false);
+    }
+  };
+
+  const openNvdDetails = (cveId: string) => {
+    window.open(`https://nvd.nist.gov/vuln/detail/${cveId}`, '_blank');
   };
 
   if (error) {
@@ -119,10 +168,24 @@ export default function CVEReports() {
                     Published: {cve.published}
                   </p>
                 </div>
-                <div>
-                  <Button variant="ghost" size="sm" data-testid={`button-details-${cve.id}`}>
+                <div className="flex flex-col gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => openNvdDetails(cve.id)}
+                    data-testid={`button-details-${cve.id}`}
+                  >
                     <ExternalLink className="w-4 h-4 mr-2" />
                     Details
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => handleGenerateAnalysis(cve)}
+                    data-testid={`button-ai-analysis-${cve.id}`}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    AI Analysis
                   </Button>
                 </div>
               </div>
@@ -131,6 +194,49 @@ export default function CVEReports() {
           </div>
         )}
       </Card>
+
+      <Dialog open={aiAnalysisOpen} onOpenChange={setAiAnalysisOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              AI Analysis: {selectedCve?.id}
+            </DialogTitle>
+            <DialogDescription>
+              AI-powered threat intelligence analysis for {selectedCve?.title}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {generatingAnalysis ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center space-y-4">
+                <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                <p className="text-muted-foreground">Analyzing CVE with AI...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {selectedCve && (
+                <Card className="p-4 bg-muted">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h4 className="font-semibold">{selectedCve.id}</h4>
+                    <Badge className={`${getCVSSColor(selectedCve.cvssScore)} font-semibold no-default-hover-elevate no-default-active-elevate`}>
+                      {getCVSSLabel(selectedCve.cvssScore)} {selectedCve.cvssScore}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{selectedCve.description}</p>
+                </Card>
+              )}
+              
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {aiAnalysis || "No analysis available."}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
