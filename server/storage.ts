@@ -1,8 +1,7 @@
 import { type User, type InsertUser } from "@shared/schema";
 import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { getDB } from "./db/mongodb";
+import { ObjectId } from "mongodb";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -35,4 +34,54 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class MongoDBStorage implements IStorage {
+  private collectionName = "users";
+
+  private async getCollection() {
+    const db = getDB();
+    return db.collection(this.collectionName);
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    const collection = await this.getCollection();
+    const user = await collection.findOne({ _id: new ObjectId(id) });
+    
+    if (!user) return undefined;
+    
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      password: user.password,
+    };
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const collection = await this.getCollection();
+    const user = await collection.findOne({ username });
+    
+    if (!user) return undefined;
+    
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      password: user.password,
+    };
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const collection = await this.getCollection();
+    const result = await collection.insertOne({
+      username: insertUser.username,
+      password: insertUser.password,
+      createdAt: new Date(),
+    });
+    
+    return {
+      id: result.insertedId.toString(),
+      username: insertUser.username,
+      password: insertUser.password,
+    };
+  }
+}
+
+export const storage = new MongoDBStorage();
