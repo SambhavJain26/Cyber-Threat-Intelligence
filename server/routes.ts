@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { ThreatIntelligenceFetcher } from "./threatIntelFetcher";
-import { analyzeThreatWithAI, chatWithAssistant, type ChatMessage } from "./openaiService";
+import { analyzeThreatWithAI, chatWithAssistant, analyzeThreatWithAILegacy, type ChatMessage } from "./openaiService";
+import { analyzeQuery, filterContext } from "./contextFilter";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { authenticateToken, generateToken, type AuthRequest } from "./middleware/auth";
@@ -511,14 +512,18 @@ Please provide:
 
 Format the response in a clear, professional manner suitable for a security operations team.`;
 
-      const context = {
-        threatFeeds: cachedData.threatFeeds.slice(0, 5),
-        cveReports: cachedData.cveReports.slice(0, 5),
+      // Use smart context filtering for CVE analysis
+      const queryAnalysis = analyzeQuery(prompt);
+      const filteredContext = filterContext(queryAnalysis, {
+        threatFeeds: cachedData.threatFeeds,
+        cveReports: cachedData.cveReports,
         dashboardStats: cachedData.dashboardStats,
-        sourceStatus: cachedData.sourceStatus
-      };
+        sourceStatus: cachedData.sourceStatus,
+        lastUpdated: cachedData.lastUpdated
+      });
 
-      const analysis = await analyzeThreatWithAI(prompt, context);
+      const result = await analyzeThreatWithAI(prompt, filteredContext, queryAnalysis);
+      const analysis = result.response;
 
       res.json({ 
         success: true, 
@@ -736,7 +741,7 @@ Format the response in a clear, professional manner suitable for a security oper
     });
   });
 
-  // Chat Assistant endpoints
+  // Chat Assistant endpoints with smart context filtering
   app.post("/api/chat/message", async (req, res) => {
     try {
       const { message, conversationHistory } = req.body;
@@ -748,15 +753,37 @@ Format the response in a clear, professional manner suitable for a security oper
         });
       }
 
-      // Prepare context for the AI
-      const context = {
+      // Step 1: Analyze the query to determine intent and extract entities
+      const queryAnalysis = analyzeQuery(message);
+      console.log(`[${new Date().toISOString()}] Chat query analysis:`, {
+        intent: queryAnalysis.intent,
+        entities: {
+          cveIds: queryAnalysis.entities.cveIds,
+          ips: queryAnalysis.entities.ips.length,
+          domains: queryAnalysis.entities.domains.length,
+          hashes: queryAnalysis.entities.hashes.length
+        },
+        confidence: queryAnalysis.confidence.toFixed(2)
+      });
+
+      // Step 2: Filter context based on query analysis
+      const filteredContext = filterContext(queryAnalysis, {
         threatFeeds: cachedData.threatFeeds,
         cveReports: cachedData.cveReports,
         dashboardStats: cachedData.dashboardStats,
-        sourceStatus: cachedData.sourceStatus
-      };
+        sourceStatus: cachedData.sourceStatus,
+        lastUpdated: cachedData.lastUpdated
+      });
 
-      let response: string;
+      console.log(`[${new Date().toISOString()}] Context filtered:`, {
+        queryType: filteredContext.queryType,
+        filterApplied: filteredContext.filterApplied,
+        relevantIOCs: filteredContext.relevantIOCs.length,
+        relevantCVEs: filteredContext.relevantCVEs.length,
+        tokenEstimate: filteredContext.tokenEstimate
+      });
+
+      let result;
 
       // If there's conversation history, use chat mode
       if (conversationHistory && conversationHistory.length > 0) {
@@ -766,16 +793,20 @@ Format the response in a clear, professional manner suitable for a security oper
         }));
         messages.push({ role: 'user', content: message });
         
-        response = await chatWithAssistant(messages, context);
+        result = await chatWithAssistant(messages, filteredContext, queryAnalysis);
       } else {
         // Single query mode
-        response = await analyzeThreatWithAI(message, context);
+        result = await analyzeThreatWithAI(message, filteredContext, queryAnalysis);
       }
+
+      console.log(`[${new Date().toISOString()}] OpenAI tokens used:`, result.tokensUsed);
 
       res.json({
         success: true,
-        response: response,
-        timestamp: new Date().toISOString()
+        response: result.response,
+        timestamp: new Date().toISOString(),
+        filterInfo: result.filterInfo,
+        tokensUsed: result.tokensUsed
       });
     } catch (error: any) {
       console.error("Chat error:", error.message);
@@ -802,24 +833,28 @@ Format the response in a clear, professional manner suitable for a security oper
         threat.value.toLowerCase().includes(ioc.toLowerCase())
       );
 
-      const context = {
-        threatFeeds: cachedData.threatFeeds,
-        cveReports: cachedData.cveReports,
-        dashboardStats: cachedData.dashboardStats,
-        sourceStatus: cachedData.sourceStatus
-      };
-
       const query = `Analyze this IOC: ${ioc}. I found ${matches.length} matches in our threat feeds. ${
         matches.length > 0 ? `Here are the matches: ${JSON.stringify(matches.slice(0, 5))}` : 'No matches found in current feeds.'
       } Provide a security analysis and recommendations.`;
 
-      const response = await analyzeThreatWithAI(query, context);
+      // Use smart context filtering
+      const queryAnalysis = analyzeQuery(query);
+      const filteredContext = filterContext(queryAnalysis, {
+        threatFeeds: cachedData.threatFeeds,
+        cveReports: cachedData.cveReports,
+        dashboardStats: cachedData.dashboardStats,
+        sourceStatus: cachedData.sourceStatus,
+        lastUpdated: cachedData.lastUpdated
+      });
+
+      const result = await analyzeThreatWithAI(query, filteredContext, queryAnalysis);
 
       res.json({
         success: true,
-        response: response,
+        response: result.response,
         matches: matches.slice(0, 10),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        filterInfo: result.filterInfo
       });
     } catch (error: any) {
       console.error("IOC analysis error:", error.message);
