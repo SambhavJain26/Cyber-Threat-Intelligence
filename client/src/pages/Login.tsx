@@ -217,14 +217,16 @@ export default function Login() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Username</FormLabel>
-                      <FormControl>
-                        <Input
-                          data-testid="input-username"
-                          placeholder="Enter your username"
-                          autoComplete="username"
-                          {...field}
-                        />
-                      </FormControl>
+                      <Input
+                        data-testid="input-username"
+                        placeholder="Enter your username"
+                        autoComplete="username"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -235,15 +237,17 @@ export default function Login() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          data-testid="input-email"
-                          type="email"
-                          placeholder="Enter your email"
-                          autoComplete="email"
-                          {...field}
-                        />
-                      </FormControl>
+                      <Input
+                        data-testid="input-email"
+                        type="email"
+                        placeholder="Enter your email"
+                        autoComplete="email"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}

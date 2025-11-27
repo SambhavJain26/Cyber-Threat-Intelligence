@@ -102,26 +102,25 @@ const FormLabel = React.forwardRef<
 })
 FormLabel.displayName = "FormLabel"
 
-const FormControl = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ children, ...props }, ref) => {
+interface FormControlProps {
+  children: React.ReactNode
+}
+
+const FormControl = ({ children }: FormControlProps) => {
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
 
-  return (
-    <div ref={ref} {...props}>
-      {React.isValidElement(children)
-        ? React.cloneElement(children as React.ReactElement<any>, {
-            id: formItemId,
-            "aria-describedby": !error
-              ? `${formDescriptionId}`
-              : `${formDescriptionId} ${formMessageId}`,
-            "aria-invalid": !!error,
-          })
-        : children}
-    </div>
-  )
-})
+  if (!React.isValidElement(children)) {
+    return <>{children}</>
+  }
+
+  return React.cloneElement(children as React.ReactElement<any>, {
+    id: formItemId,
+    "aria-describedby": !error
+      ? formDescriptionId
+      : `${formDescriptionId} ${formMessageId}`,
+    "aria-invalid": !!error,
+  })
+}
 FormControl.displayName = "FormControl"
 
 const FormDescription = React.forwardRef<
