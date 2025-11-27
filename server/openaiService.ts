@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 
-// This is using OpenAI's API, which points to OpenAI's API servers and requires your own API key.
-// the newest OpenAI model is "gpt-5-mini" which was released August 7, 2025. do not change this unless explicitly requested by the user
+// Using OpenAI's API with the user's API key
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export interface ChatMessage {
@@ -75,9 +74,9 @@ Format your responses with clear structure:
     ];
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5-mini", // using the GPT-5 Mini model as requested
+      model: "gpt-4o-mini",
       messages: messages,
-      max_completion_tokens: 2048,
+      max_tokens: 2048,
     });
 
     return response.choices[0].message.content || "I apologize, but I couldn't generate a response. Please try again.";
@@ -119,9 +118,9 @@ Always provide accurate, actionable information based on the available threat in
     ];
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5-mini", // using the GPT-5 Mini model as requested
+      model: "gpt-4o-mini",
       messages: chatMessages,
-      max_completion_tokens: 2048,
+      max_tokens: 2048,
     });
 
     return response.choices[0].message.content || "I apologize, but I couldn't generate a response. Please try again.";
