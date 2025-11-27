@@ -155,9 +155,20 @@ export class ThreatIntelligenceFetcher {
         let cvssScore = null;
         let severity = null;
 
+        // Try CVSS v3.1 first
         if (metrics.cvssMetricV31?.length > 0) {
           cvssScore = metrics.cvssMetricV31[0].cvssData.baseScore;
           severity = metrics.cvssMetricV31[0].cvssData.baseSeverity;
+        }
+        // Fallback to CVSS v3.0
+        else if (metrics.cvssMetricV30?.length > 0) {
+          cvssScore = metrics.cvssMetricV30[0].cvssData.baseScore;
+          severity = metrics.cvssMetricV30[0].cvssData.baseSeverity;
+        }
+        // Fallback to CVSS v2
+        else if (metrics.cvssMetricV2?.length > 0) {
+          cvssScore = metrics.cvssMetricV2[0].cvssData.baseScore;
+          severity = metrics.cvssMetricV2[0].baseSeverity;
         }
 
         return {
