@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, ChevronLeft, ChevronRight, Loader2, AlertTriangle } from "lucide-react";
+import { Search, Download, ChevronLeft, ChevronRight, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,6 +13,51 @@ import {
 } from "@/components/ui/select";
 import { threatFeedsAPI, exportAPI, settingsAPI } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+
+// Timezone offset mapping (in hours from UTC)
+const timezoneOffsets: Record<string, number> = {
+  'UTC': 0,
+  'GMT': 0,
+  'EST': -5,
+  'PST': -8,
+  'IST': 5.5,
+};
+
+// Convert date string to specified timezone
+const convertToTimezone = (dateStr: string, timezone: string): string => {
+  if (!dateStr) return "";
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    
+    const offset = timezoneOffsets[timezone] || 0;
+    const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+    const targetTime = new Date(utcTime + (offset * 3600000));
+    
+    return targetTime.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    }) + ` ${timezone}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
+// Parse refresh interval to milliseconds
+const parseRefreshInterval = (interval: string): number => {
+  const match = interval.match(/(\d+)\s*(minute|minutes|hour|hours)/i);
+  if (!match) return 5 * 60 * 1000; // Default 5 minutes
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+  if (unit.startsWith('hour')) {
+    return value * 60 * 60 * 1000;
+  }
+  return value * 60 * 1000;
+};
 
 export default function ThreatFeeds() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -25,9 +70,13 @@ export default function ThreatFeeds() {
   const [exporting, setExporting] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState<number | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [timezone, setTimezone] = useState<string>("UTC");
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<string>("5 minutes");
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
-  // Load settings to get items per page preference
+  // Load settings to get items per page preference and other settings
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -36,6 +85,12 @@ export default function ThreatFeeds() {
           setItemsPerPage(parseInt(response.data.itemsPerPage));
         } else {
           setItemsPerPage(20); // Default value
+        }
+        if (response.data.timezone) {
+          setTimezone(response.data.timezone);
+        }
+        if (response.data.autoRefreshInterval) {
+          setAutoRefreshInterval(response.data.autoRefreshInterval);
         }
       } catch (err) {
         console.error("Failed to load settings:", err);
@@ -52,36 +107,83 @@ export default function ThreatFeeds() {
     setCurrentPage(1);
   }, [searchQuery, typeFilter, severityFilter]);
 
-  useEffect(() => {
-    // Don't fetch data until settings are loaded
+  // Fetch feeds function - memoized for auto-refresh
+  const fetchFeeds = useCallback(async (isAutoRefresh = false) => {
     if (!settingsLoaded || itemsPerPage === null) {
       return;
     }
-
-    const fetchFeeds = async () => {
-      try {
+    
+    try {
+      if (!isAutoRefresh) {
         setLoading(true);
-        setError(null);
+      }
+      setError(null);
 
-        const response = await threatFeedsAPI.getFeeds({
-          search: searchQuery,
-          type: typeFilter,
-          severity: severityFilter,
-          page: currentPage,
-          itemsPerPage: itemsPerPage.toString()
-        });
+      const response = await threatFeedsAPI.getFeeds({
+        search: searchQuery,
+        type: typeFilter,
+        severity: severityFilter,
+        page: currentPage,
+        itemsPerPage: itemsPerPage.toString()
+      });
 
-        setFeedsData(response.data);
+      setFeedsData(response.data);
+      setLastRefresh(new Date());
+    } catch (err) {
+      setError("Failed to load threat feeds. Please try again later.");
+      console.error("Threat feeds fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, typeFilter, severityFilter, currentPage, itemsPerPage, settingsLoaded]);
+
+  // Initial fetch and on dependency changes
+  useEffect(() => {
+    fetchFeeds();
+  }, [fetchFeeds]);
+
+  // Auto-refresh based on settings interval
+  useEffect(() => {
+    if (!settingsLoaded) return;
+
+    // Clear existing interval
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+    }
+
+    // Set up new auto-refresh interval
+    const intervalMs = parseRefreshInterval(autoRefreshInterval);
+    refreshIntervalRef.current = setInterval(() => {
+      fetchFeeds(true); // Pass true for auto-refresh to not show loading spinner
+    }, intervalMs);
+
+    // Cleanup on unmount
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, [autoRefreshInterval, settingsLoaded, fetchFeeds]);
+
+  // Re-fetch settings when window gets focus (to pick up changes from Settings page)
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        const response = await settingsAPI.getGeneral();
+        if (response.data.timezone && response.data.timezone !== timezone) {
+          setTimezone(response.data.timezone);
+        }
+        if (response.data.autoRefreshInterval && response.data.autoRefreshInterval !== autoRefreshInterval) {
+          setAutoRefreshInterval(response.data.autoRefreshInterval);
+        }
       } catch (err) {
-        setError("Failed to load threat feeds. Please try again later.");
-        console.error("Threat feeds fetch error:", err);
-      } finally {
-        setLoading(false);
+        console.error("Failed to refresh settings:", err);
       }
     };
 
-    fetchFeeds();
-  }, [searchQuery, typeFilter, severityFilter, currentPage, itemsPerPage, settingsLoaded]);
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [timezone, autoRefreshInterval]);
 
   const paginatedData = feedsData.data;
   const totalPages = feedsData.totalPages || 1;
@@ -233,7 +335,7 @@ export default function ThreatFeeds() {
               <tbody>
                 {paginatedData.map((item: any, idx: number) => (
                 <tr key={item.id} className="border-b border-border hover-elevate" data-testid={`table-row-${idx}`}>
-                  <td className="px-4 py-3 text-sm">{item.date}</td>
+                  <td className="px-4 py-3 text-sm">{convertToTimezone(item.date, timezone)}</td>
                   <td className="px-4 py-3 text-sm font-medium">{item.type}</td>
                   <td className="px-4 py-3 text-sm font-mono text-xs">{item.value}</td>
                   <td className="px-4 py-3 text-sm">{item.source}</td>
