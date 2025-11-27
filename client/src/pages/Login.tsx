@@ -157,11 +157,7 @@ export default function Login() {
                           data-testid="input-email-username"
                           placeholder="Enter your email or username"
                           autoComplete="username"
-                          value={field.value}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          name={field.name}
-                          ref={field.ref}
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -182,11 +178,7 @@ export default function Login() {
                             placeholder="Enter your password"
                             autoComplete="current-password"
                             className="pr-10"
-                            value={field.value}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            name={field.name}
-                            ref={field.ref}
+                            {...field}
                           />
                         </FormControl>
                         <button
@@ -230,11 +222,7 @@ export default function Login() {
                           data-testid="input-username"
                           placeholder="Enter your username"
                           autoComplete="username"
-                          value={field.value}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          name={field.name}
-                          ref={field.ref}
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -253,11 +241,7 @@ export default function Login() {
                           type="email"
                           placeholder="Enter your email"
                           autoComplete="email"
-                          value={field.value}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          name={field.name}
-                          ref={field.ref}
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -278,11 +262,7 @@ export default function Login() {
                             placeholder="Enter your password"
                             autoComplete="new-password"
                             className="pr-10"
-                            value={field.value}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            name={field.name}
-                            ref={field.ref}
+                            {...field}
                           />
                         </FormControl>
                         <button
@@ -316,11 +296,7 @@ export default function Login() {
                             placeholder="Confirm your password"
                             autoComplete="new-password"
                             className="pr-10"
-                            value={field.value}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            name={field.name}
-                            ref={field.ref}
+                            {...field}
                           />
                         </FormControl>
                         <button
