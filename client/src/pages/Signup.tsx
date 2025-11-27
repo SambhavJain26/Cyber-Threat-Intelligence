@@ -126,7 +126,7 @@ export default function Signup() {
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <div className="relative">
+              <div className="relative flex items-center">
                 <Input
                   id="password"
                   data-testid="input-password"
@@ -138,7 +138,7 @@ export default function Signup() {
                 />
                 <button
                   type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors z-20"
                   onClick={() => setShowPassword(!showPassword)}
                   data-testid="button-toggle-password"
                 >
@@ -152,7 +152,7 @@ export default function Signup() {
 
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <div className="relative">
+              <div className="relative flex items-center">
                 <Input
                   id="confirmPassword"
                   data-testid="input-confirm-password"
@@ -164,7 +164,7 @@ export default function Signup() {
                 />
                 <button
                   type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors z-20"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   data-testid="button-toggle-confirm-password"
                 >
