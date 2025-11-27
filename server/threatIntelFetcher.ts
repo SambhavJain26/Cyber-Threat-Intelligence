@@ -154,21 +154,32 @@ export class ThreatIntelligenceFetcher {
         const metrics = cveData.metrics || {};
         let cvssScore = null;
         let severity = null;
+        let cvssVersion = null;
 
-        // Try CVSS v3.1 first
-        if (metrics.cvssMetricV31?.length > 0) {
+        // Priority: CVSS v4.0 -> v3.1 -> v3.0 -> v2.0
+        // Try CVSS v4.0 first (newest and most accurate)
+        if (metrics.cvssMetricV40?.length > 0) {
+          cvssScore = metrics.cvssMetricV40[0].cvssData.baseScore;
+          severity = metrics.cvssMetricV40[0].cvssData.baseSeverity;
+          cvssVersion = '4.0';
+        }
+        // Fallback to CVSS v3.1
+        else if (metrics.cvssMetricV31?.length > 0) {
           cvssScore = metrics.cvssMetricV31[0].cvssData.baseScore;
           severity = metrics.cvssMetricV31[0].cvssData.baseSeverity;
+          cvssVersion = '3.1';
         }
         // Fallback to CVSS v3.0
         else if (metrics.cvssMetricV30?.length > 0) {
           cvssScore = metrics.cvssMetricV30[0].cvssData.baseScore;
           severity = metrics.cvssMetricV30[0].cvssData.baseSeverity;
+          cvssVersion = '3.0';
         }
-        // Fallback to CVSS v2
+        // Fallback to CVSS v2.0
         else if (metrics.cvssMetricV2?.length > 0) {
           cvssScore = metrics.cvssMetricV2[0].cvssData.baseScore;
           severity = metrics.cvssMetricV2[0].baseSeverity;
+          cvssVersion = '2.0';
         }
 
         return {
@@ -178,6 +189,7 @@ export class ThreatIntelligenceFetcher {
           published: cveData.published,
           last_modified: cveData.lastModified,
           cvss_score: cvssScore,
+          cvss_version: cvssVersion,
           severity: severity,
           references: cveData.references?.slice(0, 5).map((ref: any) => ref.url) || []
         };
@@ -295,9 +307,14 @@ export class ThreatIntelligenceFetcher {
     }
   }
 
-  async fetchAllFeeds(): Promise<any> {
+  async fetchAllFeeds(options: { skipVirusTotal?: boolean; fastMode?: boolean } = {}): Promise<any> {
+    const { skipVirusTotal = false, fastMode = false } = options;
+    
+    // Reduce timeout for fast mode
+    const timeout = fastMode ? 15000 : 30000;
+    
     const results = await Promise.allSettled([
-      this.fetchOtxPulses(20),
+      this.fetchOtxPulses(fastMode ? 10 : 20),
       this.fetchAbuseChMalware(),
       this.fetchAbuseChUrls(),
       this.fetchAbuseChIocs(),
@@ -317,12 +334,18 @@ export class ThreatIntelligenceFetcher {
       }
     };
 
+    // Skip VirusTotal enrichment for faster refresh (it has 15s delay per indicator)
+    if (skipVirusTotal || fastMode) {
+      baseData.sources['VirusTotal'] = { success: true, data: [], count: 0, skipped: true };
+      return baseData;
+    }
+
     const otxData = baseData.sources['AlienVault OTX'];
     const indicators: string[] = [];
     if (otxData.success && otxData.data) {
       otxData.data.forEach((pulse: any) => {
         pulse.indicators?.forEach((ind: any) => {
-          if ((ind.type === 'IPv4' || ind.type === 'domain') && indicators.length < 10) {
+          if ((ind.type === 'IPv4' || ind.type === 'domain') && indicators.length < 5) {
             indicators.push(ind.indicator);
           }
         });

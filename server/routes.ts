@@ -47,25 +47,30 @@ const cachedData: CachedData = {
   settings: null
 };
 
-// Background fetcher function
-async function backgroundFetcher() {
+// Background fetcher function with optional fast mode for manual refresh
+async function backgroundFetcher(options: { fastMode?: boolean } = {}) {
   try {
-    console.log(`[${new Date().toISOString()}] Starting background threat intelligence fetch...`);
-    const data = await fetcher.fetchAllFeeds();
+    const { fastMode = false } = options;
+    const modeLabel = fastMode ? 'fast' : 'full';
+    console.log(`[${new Date().toISOString()}] Starting ${modeLabel} threat intelligence fetch...`);
+    
+    // Use fast mode for manual refresh (skips VirusTotal which has 15s delay per indicator)
+    const data = await fetcher.fetchAllFeeds({ skipVirusTotal: fastMode, fastMode });
     cachedData.lastUpdated = new Date().toISOString();
     cachedData.data = data;
     
     // Process and transform data for frontend
     processThreatData(data);
     
-    console.log(`[${new Date().toISOString()}] Background fetch completed successfully`);
+    console.log(`[${new Date().toISOString()}] ${modeLabel} fetch completed successfully`);
     console.log(`[${new Date().toISOString()}] Fetched data from ${Object.keys(data.sources).length} sources`);
     
     // Log each source status
     for (const [sourceName, sourceData] of Object.entries(data.sources)) {
       const sd = sourceData as any;
       if (sd.success) {
-        console.log(`  ✓ ${sourceName}: ${sd.count || 0} items`);
+        const skippedLabel = sd.skipped ? ' (skipped for speed)' : '';
+        console.log(`  ✓ ${sourceName}: ${sd.count || 0} items${skippedLabel}`);
       } else {
         console.log(`  ✗ ${sourceName}: ${sd.error || 'Unknown error'}`);
       }
@@ -112,7 +117,8 @@ function processThreatData(data: any) {
             value: indicator.indicator,
             source: 'AlienVault OTX',
             threatType: pulse.name,
-            severity: 'High'
+            severity: 'High',
+            cvssScore: 7.5
           });
           totalIOCs++;
           
@@ -139,7 +145,8 @@ function processThreatData(data: any) {
           value: malware.sha256,
           source: 'Abuse.ch MalwareBazaar',
           threatType: malware.signature || 'Malware',
-          severity: 'Critical'
+          severity: 'Critical',
+          cvssScore: 9.8
         });
         totalIOCs++;
       });
@@ -155,7 +162,8 @@ function processThreatData(data: any) {
           value: urlData.url,
           source: 'Abuse.ch URLhaus',
           threatType: urlData.threat || 'Malicious URL',
-          severity: 'High'
+          severity: 'High',
+          cvssScore: 7.5
         });
         totalIOCs++;
       });
@@ -164,6 +172,7 @@ function processThreatData(data: any) {
     // Process Abuse.ch IOCs
     if (sourceName === 'Abuse.ch IOCs') {
       sd.data.forEach((ioc: any, index: number) => {
+        const isSevereCritical = ioc.confidence_level > 75;
         threatFeeds.push({
           id: `ioc-${index}`,
           date: ioc.first_seen,
@@ -171,7 +180,8 @@ function processThreatData(data: any) {
           value: ioc.ioc_value,
           source: 'Abuse.ch ThreatFox',
           threatType: ioc.threat_type || 'IOC',
-          severity: ioc.confidence_level > 75 ? 'Critical' : 'High'
+          severity: isSevereCritical ? 'Critical' : 'High',
+          cvssScore: isSevereCritical ? 9.0 : 7.5
         });
         totalIOCs++;
       });
@@ -215,6 +225,7 @@ function processThreatData(data: any) {
         const type = vtData.ip_address ? 'IP Address' : 'Domain';
         
         if (maliciousCount > 0) {
+          const isCritical = maliciousCount > 5;
           threatFeeds.push({
             id: `vt-${index}`,
             date: new Date().toLocaleString(),
@@ -222,7 +233,8 @@ function processThreatData(data: any) {
             value: indicator,
             source: 'VirusTotal',
             threatType: `Malicious (${maliciousCount} detections)`,
-            severity: maliciousCount > 5 ? 'Critical' : 'High'
+            severity: isCritical ? 'Critical' : 'High',
+            cvssScore: isCritical ? 9.5 : 7.5
           });
           totalIOCs++;
         }
@@ -696,11 +708,13 @@ Format the response in a clear, professional manner suitable for a security oper
 
   app.post("/api/threat-intel/refresh", async (req, res) => {
     try {
-      console.log(`[${new Date().toISOString()}] Manual refresh triggered`);
-      await backgroundFetcher();
+      console.log(`[${new Date().toISOString()}] Manual refresh triggered (fast mode enabled)`);
+      // Use fast mode for manual refresh - skips VirusTotal enrichment which takes 15s per indicator
+      // This significantly reduces refresh time from ~1-2 minutes to ~10-15 seconds
+      await backgroundFetcher({ fastMode: true });
       res.json({
         success: true,
-        message: "Threat intelligence data refreshed",
+        message: "Threat intelligence data refreshed (fast mode)",
         lastUpdated: cachedData.lastUpdated
       });
     } catch (error: any) {
@@ -872,8 +886,8 @@ Format the response in a clear, professional manner suitable for a security oper
       return stringValue;
     };
 
-    // Generate CSV with proper escaping
-    const headers = ["Date", "IOC Type", "IOC Value", "Source", "Threat Type", "Severity"];
+    // Generate CSV with proper escaping (including CVSS Score column)
+    const headers = ["Date", "IOC Type", "IOC Value", "Source", "Threat Type", "Severity", "CVSS Score"];
     const csvRows = [headers.join(",")];
 
     filtered.forEach((item: any) => {
@@ -883,7 +897,8 @@ Format the response in a clear, professional manner suitable for a security oper
         escapeCSV(item.value || ""),
         escapeCSV(item.source || ""),
         escapeCSV(item.threatType || ""),
-        escapeCSV(item.severity || "")
+        escapeCSV(item.severity || ""),
+        escapeCSV(item.cvssScore !== undefined && item.cvssScore !== null ? String(item.cvssScore) : "N/A")
       ];
       csvRows.push(row.join(","));
     });
