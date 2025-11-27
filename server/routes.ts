@@ -849,7 +849,7 @@ Format the response in a clear, professional manner suitable for a security oper
 
   // Export endpoint - export threat feeds as CSV
   app.get("/api/export/threat-feeds", (req, res) => {
-    const { search = "", type = "all", severity = "all" } = req.query;
+    const { search = "", type = "all", severity = "all", timezone = "UTC" } = req.query;
 
     // Use only real data from threat feeds
     let filtered = cachedData.threatFeeds.filter((item: any) => {
@@ -861,25 +861,36 @@ Format the response in a clear, professional manner suitable for a security oper
       return matchesSearch && matchesType && matchesSeverity;
     });
 
-    // Generate CSV
+    // Helper function to escape CSV values properly
+    const escapeCSV = (value: string | null | undefined): string => {
+      if (value === null || value === undefined) return "";
+      const stringValue = String(value);
+      // If contains comma, quotes, or newlines, wrap in quotes and escape internal quotes
+      if (stringValue.includes(",") || stringValue.includes('"') || stringValue.includes("\n")) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    // Generate CSV with proper escaping
     const headers = ["Date", "IOC Type", "IOC Value", "Source", "Threat Type", "Severity"];
     const csvRows = [headers.join(",")];
 
     filtered.forEach((item: any) => {
       const row = [
-        item.date,
-        item.type,
-        `"${item.value}"`, // Quote to handle special characters
-        item.source,
-        `"${item.threatType}"`,
-        item.severity
+        escapeCSV(item.date || ""),
+        escapeCSV(item.type || ""),
+        escapeCSV(item.value || ""),
+        escapeCSV(item.source || ""),
+        escapeCSV(item.threatType || ""),
+        escapeCSV(item.severity || "")
       ];
       csvRows.push(row.join(","));
     });
 
     const csvContent = csvRows.join("\n");
 
-    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="threat-feeds-${new Date().toISOString().split('T')[0]}.csv"`);
     res.send(csvContent);
   });
