@@ -66,7 +66,17 @@ export const chatAPI = {
   sendMessage: (message: string, conversationHistory?: any[]) => 
     api.post("/chat/message", { message, conversationHistory }),
   analyzeIOC: (ioc: string) => 
-    api.post("/chat/analyze-ioc", { ioc })
+    api.post("/chat/analyze-ioc", { ioc }),
+  getSessions: () => 
+    api.get("/chat/sessions"),
+  getSession: (sessionId: string) => 
+    api.get(`/chat/sessions/${sessionId}`),
+  createSession: (title?: string) => 
+    api.post("/chat/sessions", { title }),
+  updateSession: (sessionId: string, messages: any[], title?: string) => 
+    api.put(`/chat/sessions/${sessionId}`, { messages, title }),
+  deleteSession: (sessionId: string) => 
+    api.delete(`/chat/sessions/${sessionId}`)
 };
 
 export default api;

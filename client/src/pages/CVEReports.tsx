@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 export default function CVEReports() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -278,9 +279,11 @@ export default function CVEReports() {
               )}
               
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {aiAnalysis || "No analysis available."}
-                </div>
+                {aiAnalysis ? (
+                  <MarkdownRenderer content={aiAnalysis} className="text-sm leading-relaxed" />
+                ) : (
+                  <p className="text-muted-foreground">No analysis available.</p>
+                )}
               </div>
             </div>
           )}

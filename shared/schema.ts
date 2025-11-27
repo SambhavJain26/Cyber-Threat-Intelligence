@@ -14,3 +14,30 @@ export const insertUserSchema = z.object({
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
+
+export interface ChatSession {
+  id: string;
+  userId: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const insertChatSessionSchema = z.object({
+  userId: z.string(),
+  title: z.string().default("New Conversation"),
+  messages: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string(),
+    timestamp: z.string(),
+  })).default([]),
+});
+
+export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;

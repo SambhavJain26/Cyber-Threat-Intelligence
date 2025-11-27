@@ -15,7 +15,8 @@ export type QueryIntent =
   | 'specific_lookup'   // Looking up a specific CVE or IOC
   | 'severity_filter'   // Filtering by severity level
   | 'source_analysis'   // Questions about data sources
-  | 'comparison';       // Comparing threats or vulnerabilities
+  | 'comparison'        // Comparing threats or vulnerabilities
+  | 'conversation';     // Casual conversation (greetings, thanks, etc)
 
 // Extracted entities from user query
 export interface ExtractedEntities {
@@ -66,6 +67,24 @@ const PATTERNS = {
   sha256: /\b[a-f0-9]{64}\b/gi,
   url: /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi
 };
+
+// Conversational patterns (greetings, thanks, etc) - these don't need threat data
+// These patterns must be VERY strict to avoid false positives with analytical requests
+const CONVERSATION_PATTERNS = [
+  /^(hi|hello|hey|greetings|howdy|yo)(\s+(there|again|everyone|all))?[!?\s,.]*$/i,
+  /^good\s*(morning|afternoon|evening)(\s+everyone)?[!?\s,.]*$/i,
+  /^(thanks|thank\s*you|thx|ty|appreciate|cheers)(\s+(so\s+much|a\s+lot))?[!?\s,.]*$/i,
+  /^(bye|goodbye|see\s*you|take\s*care|later|ciao)(\s+(later|soon|there))?[!?\s,.]*$/i,
+  /^(how\s*are\s*you|what'?s\s*up|how'?s\s*it\s*going)[!?\s,.]*$/i,
+];
+
+// Keywords that indicate a security/analytical query (NOT conversation)
+const ANALYTICAL_KEYWORDS = [
+  'analyze', 'analysis', 'check', 'investigate', 'search', 'find', 'look', 'show',
+  'cve', 'ioc', 'threat', 'malware', 'vulnerability', 'exploit', 'attack',
+  'ip', 'domain', 'hash', 'url', 'phishing', 'ransomware', 'botnet',
+  'report', 'data', 'feed', 'source', 'severity', 'critical', 'high'
+];
 
 // Intent classification keywords
 const INTENT_KEYWORDS = {
@@ -188,10 +207,56 @@ function extractEntities(query: string): ExtractedEntities {
 }
 
 /**
+ * Checks if the query is conversational (greetings, thanks, etc)
+ * This function is intentionally very strict to avoid false positives
+ */
+function isConversational(query: string): boolean {
+  const trimmedQuery = query.trim();
+  const lowerQuery = trimmedQuery.toLowerCase();
+  
+  // If the query contains any analytical/security keywords, it's NOT conversational
+  for (const keyword of ANALYTICAL_KEYWORDS) {
+    if (lowerQuery.includes(keyword)) {
+      return false;
+    }
+  }
+  
+  // If the query contains any technical entities (CVE IDs, IPs, etc), it's NOT conversational
+  if (PATTERNS.cveId.test(trimmedQuery) || 
+      PATTERNS.ipv4.test(trimmedQuery) || 
+      PATTERNS.domain.test(trimmedQuery) ||
+      PATTERNS.md5.test(trimmedQuery) ||
+      PATTERNS.sha256.test(trimmedQuery)) {
+    return false;
+  }
+  
+  // Only very short queries (1-4 words) can be conversational
+  // This allows phrases like "hi there", "thanks so much", "good morning everyone"
+  const wordCount = trimmedQuery.split(/\s+/).length;
+  if (wordCount > 4) {
+    return false;
+  }
+  
+  // Check if it matches a strict conversational pattern (must match entire string)
+  for (const pattern of CONVERSATION_PATTERNS) {
+    if (pattern.test(trimmedQuery)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Classifies the intent of the query
  */
 function classifyIntent(lowerQuery: string, entities: ExtractedEntities): QueryIntent {
-  // Check for specific lookups first (highest priority)
+  // Check for conversational patterns first (highest priority for simple messages)
+  if (isConversational(lowerQuery)) {
+    return 'conversation';
+  }
+  
+  // Check for specific lookups (highest priority for technical queries)
   if (entities.cveIds.length > 0) {
     return 'specific_lookup';
   }
@@ -209,7 +274,8 @@ function classifyIntent(lowerQuery: string, entities: ExtractedEntities): QueryI
     'specific_lookup': 0,
     'severity_filter': 0,
     'source_analysis': 0,
-    'comparison': 0
+    'comparison': 0,
+    'conversation': 0
   };
   
   for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
@@ -418,6 +484,13 @@ export function filterContext(
       relevantIOCs = cachedData.threatFeeds.slice(0, 10);
       relevantCVEs = cachedData.cveReports.slice(0, 10);
       filterApplied = 'Comparison (diverse samples)';
+      break;
+      
+    case 'conversation':
+      // No threat data needed for conversational messages
+      relevantIOCs = [];
+      relevantCVEs = [];
+      filterApplied = 'Conversation (no data context needed)';
       break;
       
     case 'general_question':

@@ -223,6 +223,15 @@ The user wants to compare threats or data. Focus on:
 - Key differences and similarities
 - Recommendations based on the comparison\n`;
 
+    case 'conversation':
+      return `Query Type: Casual Conversation
+The user is engaging in casual conversation (greeting, thanks, etc). Focus on:
+- Being friendly and professional
+- Briefly explaining your capabilities if asked
+- Offering to help with specific security questions
+- Keep responses short and conversational
+- Do NOT provide any threat data or analysis unless specifically asked\n`;
+
     case 'general_question':
     default:
       return `Query Type: General Question

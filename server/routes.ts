@@ -945,6 +945,125 @@ Format the response in a clear, professional manner suitable for a security oper
     res.send(csvContent);
   });
 
+  // Chat Session Management endpoints
+  app.get("/api/chat/sessions", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: "User not authenticated" });
+      }
+      
+      const sessions = await storage.getChatSessionsByUser(userId);
+      res.json({ success: true, sessions });
+    } catch (error: any) {
+      console.error("Get sessions error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/chat/sessions/:sessionId", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { sessionId } = req.params;
+      const userId = req.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ success: false, error: "User not authenticated" });
+      }
+      
+      const session = await storage.getChatSession(sessionId);
+      
+      if (!session) {
+        return res.status(404).json({ success: false, error: "Session not found" });
+      }
+      
+      if (session.userId !== userId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+      
+      res.json({ success: true, session });
+    } catch (error: any) {
+      console.error("Get session error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/chat/sessions", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: "User not authenticated" });
+      }
+      
+      const { title } = req.body;
+      
+      const session = await storage.createChatSession({
+        userId,
+        title: title || "New Conversation",
+        messages: [],
+      });
+      
+      res.json({ success: true, session });
+    } catch (error: any) {
+      console.error("Create session error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.put("/api/chat/sessions/:sessionId", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { sessionId } = req.params;
+      const userId = req.userId;
+      const { messages, title } = req.body;
+      
+      if (!userId) {
+        return res.status(401).json({ success: false, error: "User not authenticated" });
+      }
+      
+      const existingSession = await storage.getChatSession(sessionId);
+      
+      if (!existingSession) {
+        return res.status(404).json({ success: false, error: "Session not found" });
+      }
+      
+      if (existingSession.userId !== userId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+      
+      const session = await storage.updateChatSession(sessionId, messages, title);
+      res.json({ success: true, session });
+    } catch (error: any) {
+      console.error("Update session error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/chat/sessions/:sessionId", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { sessionId } = req.params;
+      const userId = req.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ success: false, error: "User not authenticated" });
+      }
+      
+      const existingSession = await storage.getChatSession(sessionId);
+      
+      if (!existingSession) {
+        return res.status(404).json({ success: false, error: "Session not found" });
+      }
+      
+      if (existingSession.userId !== userId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+      
+      const success = await storage.deleteChatSession(sessionId);
+      res.json({ success });
+    } catch (error: any) {
+      console.error("Delete session error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

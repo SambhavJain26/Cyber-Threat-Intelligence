@@ -1,22 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Clock, Loader2 } from "lucide-react";
+import { Send, Bot, User, Clock, Loader2, Plus, Trash2 } from "lucide-react";
 import { chatAPI } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import type { ChatSession, ChatMessage as SchemaChatMessage } from "@shared/schema";
 
 const quickQueries = [
   "What are the top phishing domains detected recently?",
   "Show me critical CVEs from the last few days",
   "Analyze recent malware trends in the threat feeds"
-];
-
-const chatSessions = [
-  { id: 1, title: "Phishing Campaign Analysis", time: "2h ago" },
-  { id: 2, title: "CVE Threat Assessment", time: "5h ago" },
-  { id: 3, title: "Malware IOC Investigation", time: "1d ago" }
 ];
 
 interface Message {
@@ -37,7 +34,130 @@ export default function ChatAssistant() {
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [loadingSessions, setLoadingSessions] = useState(false);
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchSessions();
+    }
+  }, [isAuthenticated]);
+
+  const fetchSessions = async () => {
+    try {
+      setLoadingSessions(true);
+      const response = await chatAPI.getSessions();
+      if (response.data.success) {
+        setSessions(response.data.sessions || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch sessions:", error);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const createNewSession = async () => {
+    try {
+      const response = await chatAPI.createSession("New Conversation");
+      if (response.data.success) {
+        const newSession = response.data.session;
+        setSessions(prev => [newSession, ...prev]);
+        setCurrentSessionId(newSession.id);
+        setMessages([{
+          id: 1,
+          sender: "bot",
+          content: "Hello! I'm your Cyber Threat Intelligence Assistant powered by AI. I can help you analyze threats, search IOCs, and provide insights about your security data. What would you like to know?",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
+      }
+    } catch (error) {
+      console.error("Failed to create session:", error);
+    }
+  };
+
+  const loadSession = async (sessionId: string) => {
+    try {
+      const response = await chatAPI.getSession(sessionId);
+      if (response.data.success && response.data.session) {
+        const session = response.data.session;
+        setCurrentSessionId(session.id);
+        
+        if (session.messages && session.messages.length > 0) {
+          const loadedMessages: Message[] = session.messages.map((msg: SchemaChatMessage, idx: number) => ({
+            id: idx + 1,
+            sender: msg.role === 'user' ? 'user' : 'bot',
+            content: msg.content,
+            timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }));
+          setMessages(loadedMessages);
+        } else {
+          setMessages([{
+            id: 1,
+            sender: "bot",
+            content: "Hello! I'm your Cyber Threat Intelligence Assistant powered by AI. I can help you analyze threats, search IOCs, and provide insights about your security data. What would you like to know?",
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load session:", error);
+    }
+  };
+
+  const deleteSession = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await chatAPI.deleteSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+        setMessages([{
+          id: 1,
+          sender: "bot",
+          content: "Hello! I'm your Cyber Threat Intelligence Assistant powered by AI. I can help you analyze threats, search IOCs, and provide insights about your security data. What would you like to know?",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
+      }
+      toast({
+        title: "Session Deleted",
+        description: "Chat session has been removed.",
+      });
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+    }
+  };
+
+  const saveSessionMessages = async (newMessages: Message[], title?: string) => {
+    if (!currentSessionId || !isAuthenticated) return;
+    
+    try {
+      const chatMessages: SchemaChatMessage[] = newMessages
+        .filter(m => m.sender === 'user' || m.sender === 'bot')
+        .map(m => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.content,
+          timestamp: new Date().toISOString(),
+        }));
+      
+      await chatAPI.updateSession(currentSessionId, chatMessages, title);
+      fetchSessions();
+    } catch (error) {
+      console.error("Failed to save session:", error);
+    }
+  };
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -49,13 +169,15 @@ export default function ChatAssistant() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages([...messages, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInputValue("");
     setIsLoading(true);
 
     try {
-      // Prepare conversation history for context
-      const conversationHistory = messages.map(msg => ({
+      // Prepare conversation history - only last 4 messages for context (memory optimization)
+      const recentMessages = messages.slice(-4);
+      const conversationHistory = recentMessages.map(msg => ({
         sender: msg.sender,
         content: msg.content
       }));
@@ -69,7 +191,16 @@ export default function ChatAssistant() {
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
-      setMessages(prev => [...prev, botMessage]);
+      const finalMessages = [...updatedMessages, botMessage];
+      setMessages(finalMessages);
+      
+      // Auto-generate title from first user message if new session
+      const isFirstUserMessage = updatedMessages.filter(m => m.sender === 'user').length === 1;
+      const title = isFirstUserMessage ? inputValue.slice(0, 50) + (inputValue.length > 50 ? '...' : '') : undefined;
+      
+      if (isAuthenticated && currentSessionId) {
+        saveSessionMessages(finalMessages, title);
+      }
     } catch (error: any) {
       console.error("Chat error:", error);
       
@@ -96,33 +227,87 @@ export default function ChatAssistant() {
     setInputValue(query);
   };
 
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">Chat Assistant</h1>
         <p className="text-muted-foreground" data-testid="text-page-subtitle">
-          AI-powered threat intelligence analysis and querying (GPT-5)
+          AI-powered threat intelligence analysis and querying
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1">
           <Card className="p-4">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Recent Sessions
-            </h3>
-            <div className="space-y-2">
-              {chatSessions.map((session) => (
-                <button
-                  key={session.id}
-                  className="w-full text-left p-3 rounded-md hover-elevate border border-border"
-                  data-testid={`button-session-${session.id}`}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Recent Sessions
+              </h3>
+              {isAuthenticated && (
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={createNewSession}
+                  data-testid="button-new-session"
                 >
-                  <p className="text-sm font-medium truncate">{session.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{session.time}</p>
-                </button>
-              ))}
+                  <Plus className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {!isAuthenticated ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">
+                  Sign in to save your chat sessions
+                </p>
+              ) : loadingSessions ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                </div>
+              ) : sessions.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">
+                  No sessions yet. Start a new conversation!
+                </p>
+              ) : (
+                sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`w-full text-left p-3 rounded-md hover-elevate border border-border cursor-pointer group relative ${
+                      currentSessionId === session.id ? 'bg-accent' : ''
+                    }`}
+                    onClick={() => loadSession(session.id)}
+                    data-testid={`button-session-${session.id}`}
+                  >
+                    <p className="text-sm font-medium truncate pr-6">{session.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatTimeAgo(session.updatedAt)}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => deleteSession(session.id, e)}
+                      data-testid={`button-delete-session-${session.id}`}
+                    >
+                      <Trash2 className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
         </div>
@@ -134,8 +319,8 @@ export default function ChatAssistant() {
                 <Bot className="w-5 h-5 text-primary-foreground" />
               </div>
               <div>
-                <h3 className="font-semibold" data-testid="text-assistant-title">CTI Assistant (GPT-5)</h3>
-                <p className="text-xs text-muted-foreground">Online • Real-time threat analysis</p>
+                <h3 className="font-semibold" data-testid="text-assistant-title">CTI Assistant</h3>
+                <p className="text-xs text-muted-foreground">Online - Real-time threat analysis</p>
               </div>
             </div>
 
@@ -153,13 +338,17 @@ export default function ChatAssistant() {
                   )}
                   <div className={`max-w-[70%] ${message.sender === "user" ? "order-first" : ""}`}>
                     <div
-                      className={`p-4 rounded-lg whitespace-pre-line ${
+                      className={`p-4 rounded-lg ${
                         message.sender === "user"
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-foreground"
                       }`}
                     >
-                      {message.content}
+                      {message.sender === "bot" ? (
+                        <MarkdownRenderer content={message.content} />
+                      ) : (
+                        <span className="whitespace-pre-line">{message.content}</span>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 px-1">{message.timestamp}</p>
                   </div>
@@ -184,6 +373,7 @@ export default function ChatAssistant() {
                   </div>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
             <div className="p-4 border-t border-border">
