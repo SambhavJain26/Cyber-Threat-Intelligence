@@ -14,6 +14,7 @@ import Analytics from "@/pages/Analytics";
 import ChatAssistant from "@/pages/ChatAssistant";
 import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -37,6 +38,7 @@ function App() {
         <TooltipProvider>
           <Switch>
             <Route path="/login" component={Login} />
+            <Route path="/signup" component={Signup} />
             <Route>
               <ProtectedRoute>
                 <div className="flex h-screen bg-background overflow-hidden">

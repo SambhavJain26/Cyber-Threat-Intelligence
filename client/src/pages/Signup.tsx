@@ -11,15 +11,21 @@ import { useToast } from '@/hooks/use-toast';
 import { Shield, Eye, EyeOff } from 'lucide-react';
 import { Link } from 'wouter';
 
-const loginSchema = z.object({
-  emailOrUsername: z.string().min(1, 'Email or username is required'),
+const signupSchema = z.object({
+  username: z.string().min(3, 'Username must be at least 3 characters'),
+  email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(6, 'Password must be at least 6 characters'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type SignupFormValues = z.infer<typeof signupSchema>;
 
-export default function Login() {
+export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { login } = useAuth();
   const { toast } = useToast();
 
@@ -27,20 +33,26 @@ export default function Login() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+  } = useForm<SignupFormValues>({
+    resolver: zodResolver(signupSchema),
     defaultValues: {
-      emailOrUsername: '',
+      username: '',
+      email: '',
       password: '',
+      confirmPassword: '',
     },
   });
 
-  const onSubmit = async (data: LoginFormValues) => {
+  const onSubmit = async (data: SignupFormValues) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          username: data.username,
+          email: data.email,
+          password: data.password,
+        }),
       });
 
       const result = await response.json();
@@ -48,20 +60,20 @@ export default function Login() {
       if (response.ok) {
         login(result.token, result.user);
         toast({
-          title: 'Welcome back!',
-          description: 'You have successfully logged in.',
+          title: 'Account created!',
+          description: 'Welcome to CTI Aggregator',
         });
       } else {
         toast({
-          title: 'Login failed',
-          description: result.error || 'Invalid credentials',
+          title: 'Signup failed',
+          description: result.error || 'Could not create account',
           variant: 'destructive',
         });
       }
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'An error occurred during login',
+        description: 'An error occurred during signup',
         variant: 'destructive',
       });
     }
@@ -76,24 +88,39 @@ export default function Login() {
               <Shield className="h-8 w-8 text-primary-foreground" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-center">Welcome back</CardTitle>
+          <CardTitle className="text-2xl text-center">Create an account</CardTitle>
           <CardDescription className="text-center">
-            Enter your credentials to access your account
+            Enter your information to create your account
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="emailOrUsername">Email or Username</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="emailOrUsername"
-                data-testid="input-email-username"
-                placeholder="Enter your email or username"
+                id="username"
+                data-testid="input-username"
+                placeholder="Enter your username"
                 autoComplete="username"
-                {...register('emailOrUsername')}
+                {...register('username')}
               />
-              {errors.emailOrUsername && (
-                <p className="text-sm font-medium text-destructive">{errors.emailOrUsername.message}</p>
+              {errors.username && (
+                <p className="text-sm font-medium text-destructive">{errors.username.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                data-testid="input-email"
+                type="email"
+                placeholder="Enter your email"
+                autoComplete="email"
+                {...register('email')}
+              />
+              {errors.email && (
+                <p className="text-sm font-medium text-destructive">{errors.email.message}</p>
               )}
             </div>
 
@@ -105,7 +132,7 @@ export default function Login() {
                   data-testid="input-password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   className="pr-10"
                   {...register('password')}
                 />
@@ -123,25 +150,51 @@ export default function Login() {
               )}
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  data-testid="input-confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm your password"
+                  autoComplete="new-password"
+                  className="pr-10"
+                  {...register('confirmPassword')}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  data-testid="button-toggle-confirm-password"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {errors.confirmPassword && (
+                <p className="text-sm font-medium text-destructive">{errors.confirmPassword.message}</p>
+              )}
+            </div>
+
             <Button
               data-testid="button-submit"
               type="submit"
               className="w-full"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Please wait...' : 'Sign in'}
+              {isSubmitting ? 'Please wait...' : 'Create account'}
             </Button>
           </form>
         </CardContent>
         <CardFooter className="flex flex-wrap items-center justify-center gap-2">
-          <p className="text-sm text-muted-foreground">Don't have an account?</p>
-          <Link href="/signup">
+          <p className="text-sm text-muted-foreground">Already have an account?</p>
+          <Link href="/login">
             <Button
-              data-testid="button-go-to-signup"
+              data-testid="button-go-to-login"
               variant="ghost"
               className="p-0 h-auto"
             >
-              Sign up
+              Sign in
             </Button>
           </Link>
         </CardFooter>
