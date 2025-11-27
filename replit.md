@@ -191,14 +191,16 @@ PHISHTANK_API_KEY (optional - better rate limits)
 The chat assistant uses a two-stage filtering pipeline to optimize token usage and improve response quality:
 
 1. **Query Analysis** (`server/contextFilter.ts`):
-   - Intent Classification: Determines query type (ioc_search, cve_analysis, trend_analysis, specific_lookup, etc.)
+   - Intent Classification: Determines query type (ioc_search, cve_analysis, trend_analysis, specific_lookup, conversation, etc.)
    - Entity Extraction: Extracts CVE IDs, IP addresses, domains, and file hashes using regex patterns
    - Severity/Timeframe Detection: Identifies filtering preferences
+   - Conversational Detection: Identifies greetings and casual messages to skip data fetching
 
 2. **Context Filtering**:
    - Specific lookups return only matching CVEs/IOCs (e.g., "CVE-2024-1234" returns just that CVE)
    - IOC searches filter by entity type and threat category
    - Trend analysis queries receive minimal raw data (just stats)
+   - Conversational queries skip data fetching entirely
    - Token usage tracked and logged for monitoring
 
 **Query Types Supported**:
@@ -208,9 +210,29 @@ The chat assistant uses a two-stage filtering pipeline to optimize token usage a
 - `trend_analysis` - Pattern and statistics queries
 - `source_analysis` - Questions about data sources
 - `severity_filter` - Filtering by threat severity
+- `conversation` - Casual greetings and non-analytical messages
 - `general_question` - General security inquiries
+
+**Chat Session Persistence**:
+- Chat sessions stored per user in MongoDB (`chatSessions` collection)
+- Each session includes title, messages array, and timestamps
+- Sessions persist across browser refreshes and login sessions
+- API endpoints: GET/POST `/api/chat/sessions`, POST `/api/chat/sessions/:id/messages`
+
+**Conversation Memory**:
+- Only last 4 messages sent to OpenAI for context
+- Reduces token usage while maintaining conversation coherence
+- Full history preserved in database for reference
+
+**Markdown Rendering**:
+- AI responses rendered with proper markdown formatting
+- `MarkdownRenderer` component at `client/src/components/MarkdownRenderer.tsx`
+- Supports headers, lists, code blocks, bold/italic, and inline code
+- Used in both ChatAssistant and CVE analysis dialogs
 
 **Benefits**:
 - 60-80% token reduction for specific lookups
 - Intent-specific system prompts for better responses
 - Token usage tracking in API responses
+- Persistent chat history per user
+- Casual conversation handled without wasting API calls
