@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Shield } from 'lucide-react';
+import { Shield, Eye, EyeOff } from 'lucide-react';
 
 const loginSchema = z.object({
   emailOrUsername: z.string().min(1, 'Email or username is required'),
@@ -30,6 +30,9 @@ type SignupFormValues = z.infer<typeof signupSchema>;
 
 export default function Login() {
   const [isSignup, setIsSignup] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { login } = useAuth();
   const { toast } = useToast();
 
@@ -154,7 +157,11 @@ export default function Login() {
                           data-testid="input-email-username"
                           placeholder="Enter your email or username"
                           autoComplete="username"
-                          {...field}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -167,14 +174,34 @@ export default function Login() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          data-testid="input-password"
-                          type="password"
-                          placeholder="Enter your password"
-                          {...field}
-                        />
-                      </FormControl>
+                      <div className="relative">
+                        <FormControl>
+                          <Input
+                            data-testid="input-password"
+                            type={showLoginPassword ? "text" : "password"}
+                            placeholder="Enter your password"
+                            autoComplete="current-password"
+                            className="pr-10"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          data-testid="button-toggle-login-password"
+                        >
+                          {showLoginPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -203,7 +230,11 @@ export default function Login() {
                           data-testid="input-username"
                           placeholder="Enter your username"
                           autoComplete="username"
-                          {...field}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -222,7 +253,11 @@ export default function Login() {
                           type="email"
                           placeholder="Enter your email"
                           autoComplete="email"
-                          {...field}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -235,14 +270,34 @@ export default function Login() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          data-testid="input-password"
-                          type="password"
-                          placeholder="Enter your password"
-                          {...field}
-                        />
-                      </FormControl>
+                      <div className="relative">
+                        <FormControl>
+                          <Input
+                            data-testid="input-signup-password"
+                            type={showSignupPassword ? "text" : "password"}
+                            placeholder="Enter your password"
+                            autoComplete="new-password"
+                            className="pr-10"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setShowSignupPassword(!showSignupPassword)}
+                          data-testid="button-toggle-signup-password"
+                        >
+                          {showSignupPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -253,14 +308,34 @@ export default function Login() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          data-testid="input-confirm-password"
-                          type="password"
-                          placeholder="Confirm your password"
-                          {...field}
-                        />
-                      </FormControl>
+                      <div className="relative">
+                        <FormControl>
+                          <Input
+                            data-testid="input-confirm-password"
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Confirm your password"
+                            autoComplete="new-password"
+                            className="pr-10"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          data-testid="button-toggle-confirm-password"
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -288,6 +363,9 @@ export default function Login() {
               setIsSignup(!isSignup);
               loginForm.reset();
               signupForm.reset();
+              setShowLoginPassword(false);
+              setShowSignupPassword(false);
+              setShowConfirmPassword(false);
             }}
             className="p-0 h-auto"
           >
