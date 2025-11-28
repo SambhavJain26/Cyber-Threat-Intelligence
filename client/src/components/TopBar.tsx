@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { searchAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function TopBar() {
   const { user, logout } = useAuth();
@@ -115,6 +116,7 @@ export default function TopBar() {
         </div>
         
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
