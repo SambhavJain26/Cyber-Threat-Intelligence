@@ -255,6 +255,8 @@ ABUSECH_AUTH_KEY=your-abusech-auth-key
 3. Navigate to API Keys section
 4. Create a new API key and copy it
 
+> ⚠️ Tip: The server uses the `dotenv` package to load environment variables automatically from a `.env` file at startup. Make sure you create a `.env` file by copying `.env.example` and filling in the values before running `npm run dev`.
+
 **OTX_API_KEY (Optional - AlienVault OTX):**
 1. Go to https://otx.alienvault.com/
 2. Create a free account

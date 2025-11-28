@@ -1,3 +1,11 @@
+import dotenv from 'dotenv';
+// Load .env early so that subsequent imports (OpenAI client, DB, etc.) can use process.env values
+const dotenvResult = dotenv.config();
+if (dotenvResult.error) {
+  console.warn('[dotenv] No .env file found or failed to parse. Using only process environment variables.');
+} else {
+  console.log('[dotenv] Loaded environment variables from .env');
+}
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -48,6 +56,19 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Basic developer-oriented check: warn if typical required envs are missing
+  // in development mode, don't crash – just log. In production, crash early so operators can fix.
+  const requiredEnvs = ["OPENAI_API_KEY", "MONGODB_URI"];
+  const missing = requiredEnvs.filter(e => !process.env[e]);
+  if (missing.length > 0) {
+    const envMsg = `Missing required env vars: ${missing.join(', ')}.`;
+    if (process.env.NODE_ENV === 'production') {
+      console.error(envMsg + ' Exiting (production mode)');
+      process.exit(1);
+    } else {
+      console.warn(envMsg + ' Continuing in development mode; some features may not work.');
+    }
+  }
   await connectToMongoDB();
   
   const server = await registerRoutes(app);

@@ -1,7 +1,15 @@
+import 'dotenv/config';
 import OpenAI from "openai";
 import { FilteredContext, formatContextForLLM, QueryAnalysis } from "./contextFilter";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Create the OpenAI client only if an API key is provided. This avoids a runtime
+// crash during module import when no API key is set in the environment.
+let openai: OpenAI | null = null;
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+} else {
+  console.warn('OPENAI_API_KEY is not set – OpenAI client will not be initialized.');
+}
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -38,6 +46,8 @@ export async function analyzeThreatWithAI(
       { role: "system", content: systemPrompt },
       { role: "user", content: userQuery + contextData }
     ];
+
+    if (!openai) throw new Error('OPENAI_API_KEY is not set; cannot call OpenAI API.');
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -89,6 +99,8 @@ export async function chatWithAssistant(
       { role: "system", content: systemPrompt },
       ...clonedMessages
     ];
+
+    if (!openai) throw new Error('OPENAI_API_KEY is not set; cannot call OpenAI API.');
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
