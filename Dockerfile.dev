@@ -1,0 +1,28 @@
+# CTI Aggregator - Development Docker Build
+# For development with hot-reload support
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Set environment variables
+ENV NODE_ENV=development
+ENV PORT=5000
+
+# Expose port
+EXPOSE 5000
+
+# Start in development mode
+CMD ["npm", "run", "dev"]

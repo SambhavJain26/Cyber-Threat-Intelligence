@@ -342,9 +342,14 @@ project-root/
 │   ├── threatIntelFetcher.ts # Threat intelligence fetching
 │   └── index.ts         # Server entry point
 ├── shared/              # Shared types and schemas
+├── .dockerignore        # Files to exclude from Docker builds
 ├── .env                 # Environment variables (create this)
 ├── .gitignore           # Git ignore rules
 ├── components.json      # Shadcn UI configuration
+├── docker-compose.yaml  # Production Docker Compose config
+├── docker-compose.dev.yaml # Development Docker Compose config
+├── Dockerfile           # Production Docker build
+├── Dockerfile.dev       # Development Docker build
 ├── package.json         # Project dependencies
 ├── postcss.config.js    # PostCSS configuration
 ├── tailwind.config.ts   # Tailwind CSS configuration
@@ -357,6 +362,288 @@ project-root/
 # - replit.md
 # - design_guidelines.md (optional)
 ```
+
+---
+
+## Docker Deployment
+
+Docker provides a consistent, isolated environment to run the CTI Aggregator application. This section covers both production and development Docker setups.
+
+### Prerequisites for Docker
+
+1. **Docker Desktop** (Windows/macOS) or **Docker Engine** (Linux)
+   - Download from: https://www.docker.com/products/docker-desktop/
+   - For Windows, enable WSL 2 backend for better performance
+   - Verify installation:
+     ```bash
+     docker --version
+     docker-compose --version
+     ```
+
+2. **Environment Variables**
+   - Create a `.env` file in the project root (see Environment Variables section above)
+
+### Docker Files Overview
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Production build (multi-stage, optimized) |
+| `Dockerfile.dev` | Development build (with hot-reload support) |
+| `docker-compose.yaml` | Production deployment with MongoDB |
+| `docker-compose.dev.yaml` | Development deployment with volume mounts |
+| `.dockerignore` | Files to exclude from Docker builds |
+
+---
+
+### Quick Start with Docker (Production)
+
+1. **Create Environment File**
+
+   Create a `.env` file in the project root:
+   ```env
+   JWT_SECRET=your-super-secret-jwt-key-here
+   OPENAI_API_KEY=your-openai-api-key-here
+   
+   # Optional threat intel API keys
+   OTX_API_KEY=your-otx-api-key
+   VIRUSTOTAL_API_KEY=your-virustotal-api-key
+   ABUSECH_AUTH_KEY=your-abusech-auth-key
+   ```
+
+2. **Build and Start Containers**
+
+   ```bash
+   # Build and start all services in detached mode
+   docker-compose up -d --build
+
+   # View logs
+   docker-compose logs -f
+
+   # View logs for specific service
+   docker-compose logs -f app
+   docker-compose logs -f mongodb
+   ```
+
+3. **Access the Application**
+
+   Open your browser and navigate to:
+   ```
+   http://localhost:5000
+   ```
+
+4. **Stop Containers**
+
+   ```bash
+   # Stop all services
+   docker-compose down
+
+   # Stop and remove volumes (clears database)
+   docker-compose down -v
+   ```
+
+---
+
+### Development with Docker
+
+For development with hot-reload support:
+
+1. **Start Development Environment**
+
+   ```bash
+   # Build and start development containers
+   docker-compose -f docker-compose.dev.yaml up -d --build
+
+   # View logs
+   docker-compose -f docker-compose.dev.yaml logs -f
+   ```
+
+2. **Development Features**
+   - Source code is mounted as volumes
+   - Changes to `client/`, `server/`, and `shared/` directories are reflected immediately
+   - Hot-reload is enabled for faster development
+
+3. **Stop Development Environment**
+
+   ```bash
+   docker-compose -f docker-compose.dev.yaml down
+   ```
+
+---
+
+### Docker Commands Reference
+
+#### Container Management
+
+```bash
+# Start services
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+# Restart a specific service
+docker-compose restart app
+
+# View running containers
+docker-compose ps
+
+# View container logs
+docker-compose logs -f [service_name]
+
+# Execute command in running container
+docker-compose exec app sh
+docker-compose exec mongodb mongosh
+```
+
+#### Image Management
+
+```bash
+# Rebuild images
+docker-compose build
+
+# Rebuild without cache
+docker-compose build --no-cache
+
+# Remove unused images
+docker image prune -f
+```
+
+#### Volume Management
+
+```bash
+# List volumes
+docker volume ls
+
+# Remove all project volumes (WARNING: deletes database data)
+docker-compose down -v
+
+# Backup MongoDB data
+docker-compose exec mongodb mongodump --out /data/backup
+
+# View volume details
+docker volume inspect cti-aggregator_mongodb_data
+```
+
+---
+
+### Docker Configuration Details
+
+#### Production Dockerfile Features
+
+- **Multi-stage build**: Separates build and runtime for smaller images
+- **Alpine base**: Uses lightweight Node.js Alpine image
+- **Non-root user**: Runs application as non-root for security
+- **Health checks**: Built-in health monitoring
+- **Optimized layers**: Dependencies cached separately from source code
+
+#### Docker Compose Services
+
+| Service | Description | Port |
+|---------|-------------|------|
+| `app` | CTI Aggregator application | 5000 |
+| `mongodb` | MongoDB 7.0 database | 27017 |
+
+#### Environment Variables in Docker
+
+Environment variables are passed from your `.env` file to containers via docker-compose. The following are used:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JWT_SECRET` | Yes | Secret key for JWT tokens |
+| `OPENAI_API_KEY` | Yes | OpenAI API key for AI features |
+| `OTX_API_KEY` | No | AlienVault OTX API key |
+| `VIRUSTOTAL_API_KEY` | No | VirusTotal API key |
+| `ABUSECH_AUTH_KEY` | No | Abuse.ch authentication key |
+
+---
+
+### Docker Troubleshooting
+
+#### "Cannot connect to Docker daemon"
+- Ensure Docker Desktop is running
+- On Linux, check if the Docker service is started: `sudo systemctl start docker`
+
+#### "Port 5000 already in use"
+- Stop any existing services using port 5000
+- Or modify the port mapping in `docker-compose.yaml`:
+  ```yaml
+  ports:
+    - "3000:5000"  # Maps to localhost:3000
+  ```
+
+#### "MongoDB connection refused"
+- Wait for MongoDB to fully start (check with `docker-compose logs mongodb`)
+- Ensure the MongoDB container is healthy: `docker-compose ps`
+
+#### "Build failed - npm install error"
+- Clear Docker build cache: `docker-compose build --no-cache`
+- Ensure you have a stable internet connection
+
+#### Container keeps restarting
+- Check container logs: `docker-compose logs app`
+- Verify all required environment variables are set in `.env`
+
+#### "Health check failed"
+- The health check endpoint is `/api/health`
+- Wait for the application to fully start (30s grace period)
+- Check application logs for startup errors
+
+---
+
+### Advanced: Building Individual Images
+
+```bash
+# Build production image only
+docker build -t cti-aggregator:latest .
+
+# Build development image only
+docker build -f Dockerfile.dev -t cti-aggregator:dev .
+
+# Run production image standalone (requires external MongoDB)
+docker run -d \
+  -p 5000:5000 \
+  -e MONGODB_URI=mongodb://host.docker.internal:27017 \
+  -e MONGODB_DB_NAME=cti_aggregator \
+  -e JWT_SECRET=your-secret \
+  -e OPENAI_API_KEY=your-key \
+  --name cti-app \
+  cti-aggregator:latest
+```
+
+---
+
+### Using Docker with MongoDB Atlas
+
+If you prefer using MongoDB Atlas instead of the containerized MongoDB:
+
+1. **Modify docker-compose.yaml**
+
+   Comment out or remove the `mongodb` service and update the `app` service:
+
+   ```yaml
+   services:
+     app:
+       build:
+         context: .
+         dockerfile: Dockerfile
+       container_name: cti-app
+       restart: unless-stopped
+       environment:
+         - NODE_ENV=production
+         - PORT=5000
+         - MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net
+         - MONGODB_DB_NAME=cti_aggregator
+         - JWT_SECRET=${JWT_SECRET}
+         - OPENAI_API_KEY=${OPENAI_API_KEY}
+       ports:
+         - "5000:5000"
+   ```
+
+2. **Update your `.env` file** with your Atlas connection string
+
+3. **Ensure your IP is whitelisted** in MongoDB Atlas Network Access settings
+
+---
 
 ## Troubleshooting
 
